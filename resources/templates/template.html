@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <main>
+
+      <header>
+        <h2>Setor de Produção — Pratos Prontos</h2>
+        <h3>Ordem de Produção — Emissão: {{EMISSAO}}</h3>
+      </header>
+
+      <section class="row destaque-cinza">
+        <div class="col">
+          <p class="codigo-produto">
+            <strong>{{CODIGO}}</strong>
+            <span class="separator">|</span>
+            <strong>{{PRODUTO}}</strong>
+          </p>
+        </div>
+      </section>
+
+      <section class="highlight-row">
+        <div class="highlight-col">
+          <p><strong>DATA</strong></p>
+          <p><span style="font-size: 1.5em;">{{DIA}}</span></p>
+        </div>
+        <div class="highlight-col">
+          <p><strong>QUANTIDADE NECESSÁRIA</strong></p>
+          <p><strong><span style="font-size: 2em;">{{QUANTIDADE}}</span></strong></p>
+        </div>
+        <div class="highlight-col">
+          <p><strong>CLASS/EST</strong>: {{SECAO}}</p>
+          <p><strong>TIPO</strong>: {{SUBGRUPO}}</p>
+        </div>
+      </section>
+
+      <section class="divider row">
+        <div class="col">
+          <p><strong>DATA DE PRODUÇÃO:</strong> ________ / _________ / __________</p>
+          <p><strong>RESPONSÁVEL:</strong></p>
+        </div>
+      </section>
+
+      <section class="divider">
+        <div class="barcode-box">
+          <div class="barcode-ean13">*{{EAN13}}*</div>
+        </div>
+        <div class="barcode-number">{{EAN13}}</div>
+      </section>
+
+      <section class="highlight-row">
+        <div class="highlight-col">
+          <p><strong>QUANTIDADE PRODUZIDA</strong></p>
+          <p style="margin-top: 1em;"></p> 
+          <p>_________________________</p>
+        </div>
+        <div class="highlight-col">
+          <p><strong>ACOMPANHADO POR</strong></p>
+          <p style="margin-top: 1em;"></p> 
+          <p>_________________________</p>
+        </div>
+        <div class="highlight-col">
+          <p><strong>CONFERIDO POR</strong></p>
+          <p style="margin-top: 1em;"></p> 
+          <p>_________________________</p>
+        </div>
+      </section>
+
+      <section class="divider">
+        <p><strong>OBSERVAÇÕES:</strong></p>
+        <div class="obs-box"></div>
+      </section>
+    </main>
+    <footer>
+        <p>{{NUM}}</p>
+    </footer>
+  </body>
+</html>

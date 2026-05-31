@@ -1,0 +1,212 @@
+@font-face {
+  font-family: 'Code39AzaleaWide2';
+  src: url('Code39AzaleaWide2.ttf') format('truetype');
+}
+
+@page {
+  size: A4 landscape;
+  margin: 1.0cm;
+}
+
+body {
+  font-family: Arial, Helvetica, sans-serif;
+  color: #000;
+  margin: 0;
+  padding: 0;
+  background: #fff;
+  font-size: 18px;
+}
+
+main {
+  margin: 0 auto;
+  border: 1px solid #ccc;
+  padding: 10px 15px;
+}
+
+header {
+  text-align: center;
+  border-bottom: 1px solid #ccc;
+  padding-bottom: 4px;
+  margin-bottom: 8px;
+}
+
+h1 {
+  font-size: 17px;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+h2 {
+  font-size: 12px;
+  font-weight: bold;
+  margin: 1px 0 0 0;
+}
+
+h3 {
+  font-size: 11px;
+  margin: 0;
+  color: #555;
+}
+
+section {
+  margin-bottom: 5px;
+}
+
+p {
+  margin: 3px 0;
+  font-size: 12px;
+}
+
+.row {
+  display: table;
+  width: 100%;
+  table-layout: fixed;
+}
+
+.col {
+  display: table-cell;
+  width: 48%;
+  vertical-align: top;
+  padding: 2px;
+}
+
+.grid3 {
+  margin: 0 -5px;
+  overflow: hidden;
+}
+
+.grid3 div {
+  width: 24%;
+  float: left;
+  margin: 5px;
+  box-sizing: border-box;
+}
+
+.clearfix::after {
+  content: "";
+  display: table;
+  clear: both;
+}
+
+.divider {
+  border-top: 1px solid #ccc;
+  margin-top: 5px;
+  padding-top: 5px;
+}
+
+.barcode-box {
+  border: 1px solid #ccc;
+  background: #eee;
+  margin-top: 5px;
+  text-align: center;
+  padding: 5px;
+}
+
+.barcode-ean13 {
+  font-family: 'Code39AzaleaRegular3.ttf';
+  font-size: 40px;
+  color: #000;
+  display: block;
+}
+
+.barcode-number {
+  text-align: center;
+  font-size: 18px;
+  letter-spacing: 2px;
+  margin-top: 2px;
+  font-family: "Courier New", monospace;
+  color: #000;
+}
+
+footer {
+  text-align: center;
+  font-size: 9px;
+  color: #777;
+  margin-top: 8px;
+}
+
+.obs-box {
+  border: 1px solid #ccc;
+  height: 40px;
+  margin-top: 3px;
+}
+
+.col-left {
+  display: table-cell;
+  width: 50%;
+  vertical-align: top;
+}
+
+.col-right {
+  display: table-cell;
+  width: 50%;
+  text-align: right;
+  vertical-align: top;
+}
+
+.codigo-produto {
+  font-size: 18px;
+  font-weight: bold;
+  text-align: center;
+}
+
+.separator {
+  margin: 0 18px;
+  color: #888;
+}
+
+.highlight-row {
+  display: table;
+  font-size: 10px;
+  width: 100%;
+  table-layout: fixed;
+  margin-bottom: 10px;
+  border: 1px solid #ccc;
+  background-color: #eee;
+}
+
+.highlight-col {
+  display: table-cell;
+  text-align: center;
+  padding: 10px;
+  vertical-align: middle;
+  border-left: 1px solid #ccc;
+}
+
+.highlight-col:first-child {
+  border-left: none;
+}
+
+.highlight-col p {
+  margin: 4px 0;
+  font-size: 13px;
+}
+
+.highlight-col strong {
+  font-size: 13px;
+  text-transform: uppercase;
+}
+
+.destaque-cinza {
+  background-color: #444;
+  color: #f5f5f5;
+  padding: 15px;
+  margin-bottom: 5px;
+}
+
+.destaque-cinza strong {
+  color: #fff;
+}
+
+.destaque-cinza .separator {
+  color: #ccc;
+}
+
+footer {
+    width: 100%;
+    text-align: right; /* Centraliza o texto */
+    padding: 10px 0; /* Espaçamento interno */
+    margin-top: 120px; /* Espaço para separar do conteúdo acima */
+    font-size: 0.3em; /* Deixa o texto bem pequeno */
+    color: #a0a0a0; /* Um tom de cinza claro para o texto */
+}

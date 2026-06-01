@@ -16,7 +16,7 @@ LOGDIR ?= Logs/
 INSPECT_ROWS ?= 5
 INSPECT_COLS ?= 72
 
-.PHONY: pcp inspect test
+.PHONY: file inspect test
 
 pdfs:
 	go run ./cmd \
@@ -36,7 +36,7 @@ pdfs:
 
 inspect:
 	go run ./cmd \
-		-xls "$(PCP)" \
+		-xls "$(FILE)" \
 		-sheet "$(SHEET)" \
 		-inspect \
 		-inspect-rows "$(INSPECT_ROWS)" \

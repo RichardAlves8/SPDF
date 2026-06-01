@@ -22,7 +22,7 @@ Por se tratar de documentos destinados ao controle de produção, qualquer erro 
 E por isso precisava ser algo seguro para este processo, dali o nome SPDF.
 
 O projeto nasceu da observação de que, apesar da sensibilidade dos documentos gerados, o fluxo era inteiramente automatizável — e aprimorável. Com a solução implementada, mais de 80% dos problemas operacionais foram eliminados. Falhas agora ocorrem apenas em situações de exceção muito raras, e a diferença em relação ao processo anterior é discrepante.
-*Pode parecer algo simples, mas SPDF mudou a forma como trabalhavamos diáriamente.*
+*Pode parecer algo simples, mas SPDF mudou a forma como trabalhavamos diariamente.*
 ## Agradecimentos
 
 Ao time de Programação e Controle de Produção *(PCP)* pelo apoio durante o desenvolvimento —
@@ -33,7 +33,7 @@ e desenvolvimento. Grande parceria.
 
 ---
 
-## Resumo e ínicio do Projeto
+## Resumo e início do Projeto
 
 ```mermaid
 flowchart TD

@@ -10,7 +10,7 @@ import (
 )
 
 // Processor é o motor principal responsável por ler a planilha de programação,
-// extrair os dados de produção e orquestrar a geração das fichas em PDF.
+// extrair os dados de produção e orquestrar a geração das fichas em PDF. (é o processador central!)
 type Processor struct {
 	cfg      Config
 	meta     map[string]ProdutoInfo

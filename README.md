@@ -2,7 +2,7 @@
 
 ## Origem — Security PDF
 
-Diariamente, o responsável pela emissão de ordens de produção *(esse processo que diz oque apontadores de produão devem fazer)* separava entre uma e duas horas para realizar um processo inteiramente manual: copiar o código da planilha de programação, colar no template de ficha e imprimir — uma ficha por vez. Em períodos sazonais, essa carga podia ultrapassar as duas horas com facilidade podendo chegar de 200 até 500 ordens por dia.
+Diariamente, o responsável pela emissão de ordens de produção separava entre uma e duas horas para realizar um processo inteiramente manual: copiar o código da planilha de programação, colar no template de ficha e imprimir — uma ficha por vez. Em períodos sazonais, essa carga podia ultrapassar as duas horas com facilidade podendo chegar de 200 até 500 ordens por dia.
 
 ### Resumo do processo manual
 

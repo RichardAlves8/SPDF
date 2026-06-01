@@ -6,7 +6,7 @@
 
 ## Origem — Security PDF
 
-Diariamente, o responsável pela emissão de ordens de produção *(esse processo que diz oque apontadores de produão devem fazer)* separava entre uma e duas horas para realizar um processo inteiramente manual: copiar o código da planilha de programação, colar no template de ficha e imprimir — uma ficha por vez. Em períodos sazonais, essa carga podia ultrapassar as duas horas com facilidade.
+Diariamente, o responsável pela emissão de ordens de produção *(esse processo que diz oque apontadores de produão devem fazer)* separava entre uma e duas horas para realizar um processo inteiramente manual: copiar o código da planilha de programação, colar no template de ficha e imprimir — uma ficha por vez. Em períodos sazonais, essa carga podia ultrapassar as duas horas com facilidade podendo chegar de 200 até 500 ordens por dia.
 
 ### Resumo do processo manual
 
@@ -17,15 +17,15 @@ flowchart LR
     C -.->|de uma em uma| A
 ```
 
-Por se tratar de documentos destinados ao controle de produção, qualquer erro tinha impacto direto no processo fabril. A tarefa era ao mesmo tempo repetitiva e suscetível a falhas operacionais e imprevistos.
+Por se tratar de documentos destinados ao controle de produção, qualquer erro tinha impacto direto no processo fabril. No entanto, por ser algo manual, a tarefa era ao mesmo tempo repetitiva e suscetível a falhas operacionais.
 
 E por isso precisava ser algo seguro para este processo, dali o nome SPDF.
 
-O projeto nasceu da observação de que, apesar da sensibilidade dos documentos gerados, o fluxo era inteiramente automatizável — e aprimorável. Com a solução implementada, mais de 80% dos problemas operacionais foram eliminados. Falhas agora ocorrem apenas em situações de exceção muito raras, e a diferença em relação ao processo anterior é imediatamente perceptível nos registros.
+O projeto nasceu da observação de que, apesar da sensibilidade dos documentos gerados, o fluxo era inteiramente automatizável — e aprimorável. Com a solução implementada, mais de 80% dos problemas operacionais foram eliminados. Falhas agora ocorrem apenas em situações de exceção muito raras, e a diferença em relação ao processo anterior é discrepante.
 *Pode parecer algo simples, mas SPDF mudou a forma como trabalhavamos diáriamente.*
 ## Agradecimentos
 
-Ao time de Programção e Controle de Produção *(PCP)* pelo apoio durante o desenvolvimento —
+Ao time de Programação e Controle de Produção *(PCP)* pelo apoio durante o desenvolvimento —
 os reais responsáveis por todo o processo. Foi um dos projetos mais divertidos
 que já trabalhei em equipe, e eles mudaram a forma como enxergo colaboração
 no desenvolvimento. Grande parceria. 
@@ -56,7 +56,7 @@ O `cmd/main.go` atua como ponto de entrada da CLI, orquestrando o pacote `pkg/pc
 
 ## Parâmetros principais
 
-Configuráveis via `Makefile` ou flags diretas na CLI.
+Configuráveis `Makefile` e flags CLI.
 
 | Parâmetro | Tipo | Descrição |
 |-----------|------|-----------|
@@ -108,14 +108,35 @@ Configuráveis via `Makefile` ou flags diretas na CLI.
 
 ---
 
-## Comandos
+## Uso em Linux (CLI)
 
 ```bash
 # Executar todos os testes
 go test ./...
 
-# Processar uma planilha de exemplo
-go run ./cmd
+# Processar uma planilha de exemplo — Mais detalhes de parâmetros na tabela a cima
+go run ./cmd \
+    -xls "caminho da planilha" \
+    -sheet "Descrição da aba em que se encontra os dados" \
+    -date-cols "Coluna com dados de quantidade" \
+    -code-col "Coluna de Código Item" \
+    -desc-col "Coluna de Descrição" \
+    -start-line "Linha de ínicio (para desconsiderar o cabeçalho)" \
+    -date-line "Linha onde se encontram as datas" \
+    -meta "Arquivo CSV de meta dados dos produtos (dim_Item)" \
+    -template "template.html" \
+    -out "Pasta de saída" \
+    -verbose=true/false \
+    -log=true/false \
+    -log-dir "saída de log"
+#Inspeçaõ de planilha, o uso desta função foi feito para garantir que
+#Os parametros passados estavam de acordo com as necessidades (caso houvesse alguma alteração na planilha)
+o run ./cmd \
+    -xls "caminho da planilha" \
+    -sheet "Descrição da aba" \
+    -inspect \
+    -inspect-rows "linhas para inspecionar" \
+    -inspect-cols "colunas"
 ```
 
 ---
@@ -126,7 +147,7 @@ go run ./cmd
 
 ### Observações Finais
 
-Este repositório representa apenas uma parte do projeto. O SPDF completo possui
+Este repositório representa apenas uma parte do todo (no entanto, a mais importante, e que resolve o problema). O SPDF completo possui
 interface gráfica e foi desenvolvido em Java com Apache POI, conexão JDBC para
 metadados atualizados e arquivos de configuração *(strings de conexão e acesso a outros servidores)* criptografados em AES-GCM.
 

@@ -54,6 +54,23 @@ O `cmd/main.go` atua como ponto de entrada da CLI, orquestrando o pacote `pkg/pc
 
 ---
 
+## Pré-requisitos
+
+- **Go (Golang):** Versão 1.22 ou superior.
+- **Bibliotecas:** `excelize/v2` para leitura de Excel e `gopdf` para geração de documentos. Via Go Modules.
+
+Para instalar as dependências Go e garantir que o ambiente esteja pronto:
+```bash
+#Sincronizar dependências do projeto
+go mod tidy
+
+# Bibliotecas principais:
+go get github.com/xuri/excelize/v2
+go get github.com/signintech/gopdf
+```
+
+---
+
 ## Parâmetros principais
 
 Configuráveis `Makefile` e flags CLI.
@@ -108,7 +125,7 @@ Configuráveis `Makefile` e flags CLI.
 
 ---
 
-## Uso em Linux (CLI)
+## Exemplo de uso (Linux)
 
 ```bash
 # Executar todos os testes
@@ -165,3 +182,7 @@ inclusões (pedidos fora da programação semanal ou por encomenda).
 - [ChangePass XLS](https://github.com/RichardAlves8/Passd_Xls) —
   se você já perdeu controle de credenciais embutidas em planilhas Excel
   *(strings de conexão OLE DB)*, vale a leitura!
+
+
+
+*att, Richard.*

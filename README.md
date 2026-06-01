@@ -28,7 +28,7 @@ O projeto nasceu da observação de que, apesar da sensibilidade dos documentos 
 Ao time de Programação e Controle de Produção *(PCP)* pelo apoio durante o desenvolvimento —
 os reais responsáveis por todo o processo. Foi um dos projetos mais divertidos
 que já trabalhei em equipe, e eles mudaram a forma como enxergo colaboração
-no desenvolvimento. Grande parceria. 
+e desenvolvimento. Grande parceria. 
 
 
 ---

@@ -79,7 +79,7 @@ func (r GoPDFRenderer) Render(ctx context.Context, outputPath string, data Templ
 	}
 
 	// ── 1. Cabeçalho (Header) ─────────────────────────────────────────────────
-	drawCenteredText("Setor de Produção — Pratos Prontos", 28, 14, "arial")
+	drawCenteredText("Departamento X — Setor Y", 28, 14, "arial")
 	drawCenteredText(fmt.Sprintf("Ordem de Produção — Emissão: %s", val("EMISSAO")), 46, 11, "arial")
 
 	// Linha separadora horizontal.
@@ -88,7 +88,6 @@ func (r GoPDFRenderer) Render(ctx context.Context, outputPath string, data Templ
 	pdf.Line(marginX, 62, marginX+contentW, 62)
 
 	// ── 2. Destaque do Produto (Gray Box) ─────────────────────────────────────
-	// Retângulo cinza escuro para facilitar a leitura rápida do código e nome do item.
 	destY := 67.0
 	destH := 50.0
 	pdf.SetFillColor(68, 68, 68)
@@ -155,7 +154,7 @@ func (r GoPDFRenderer) Render(ctx context.Context, outputPath string, data Templ
 	pdf.Cell(nil, "RESPONSÁVEL:")
 
 	// ── 5. Código de Barras (Barcode) ─────────────────────────────────────────
-	// O código de barras é vital para a rastreabilidade via scanners na fábrica.
+	// começa e termina com * (para coletores de dados) *
 	bcY := manualY + 48
 	bcH := 80.0
 	bcX := 200.0

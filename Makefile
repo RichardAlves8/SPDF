@@ -1,10 +1,10 @@
-FILE ?= resources/test.xlsm
-SHEET ?= RELATÓRIO PP GERAL
-META ?= resources/meta/dados.CSV
+FILE ?= resources/metalurgica.bicicletas/dFato.xlsm
+SHEET ?= RELATORIO PP GERAL
+META ?= resources/metalurgica.bicicletas/dim_Items.CSV
 TEMPLATE ?= resources/templates/template.html
 OUT ?= ../SPDF (out)/
 
-DATE_COLS ?= 12,15,18,21,24,27,30,33,35,37,39
+DATE_COLS ?= 12,15,18,21,24,27,30
 CODE_COL ?= 2
 DESC_COL ?= 3
 START_LINE ?= 5

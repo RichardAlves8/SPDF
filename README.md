@@ -1,8 +1,4 @@
-# SPDF 
 
-> Gerador de Ordens de Ordens de produção em PDF fazendo enrich de planilhas de controle (`.xlsm`).
-
----
 
 ## Origem — Security PDF
 

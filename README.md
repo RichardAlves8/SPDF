@@ -167,18 +167,3 @@ metadados atualizados e arquivos de configuração *(strings de conexão e acess
 O Original também contem cache de arquivos metadados — necessário porque no
 setor de produção é comum operadores abrirem o sistema repetidamente para emitir
 inclusões (pedidos fora da programação semanal ou por encomenda).
-
----
-
-## Projetos Relacionados
-
-- [Java_SafeAES_Json](https://github.com/RichardAlves8/Java_SafeAES_Json) —
-  Criei e *já reutilizei em outros*  para criptografar os arquivos de configuração
-
-- [ChangePass XLS](https://github.com/RichardAlves8/Passd_Xls) —
-  se você já perdeu controle de credenciais embutidas em planilhas Excel
-  *(strings de conexão OLE DB)*, vale a leitura!
-
-
-
-*att, Richard.*

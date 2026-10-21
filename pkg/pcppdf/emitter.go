@@ -7,131 +7,136 @@ import (
 	"path/filepath"
 )
 
-// EmitRequest contém os dados necessários para gerar uma única Ordem de Produção.
-// Ele serve como o contrato entre o Processor e o Emitter.
-type EmitRequest struct {
-	Codigo        string
-	Descricao     string
-	Quantidade    float64
-	DataFormatada string // Data legível (ex: Sexta — 29/05/2026)
-	DataEmissao   string // Data de geração do documento
-	Numero        int    // Sequencial da ordem
-	Inclusao      bool   // Define se é uma ordem extra/manual
+// PedidoDeEmissao reúne os dados necessários para gerar uma única ordem de
+// produção. Ele é o contrato entre o Processador e o Emissor.
+type PedidoDeEmissao struct {
+	Codigo        string  // código do produto, como veio da planilha
+	Descricao     string  // descrição lida da planilha
+	Quantidade    float64 // quantidade a produzir
+	DataFormatada string  // data legível, como "Sexta — 29/05/2026"
+	DataEmissao   string  // data de geração do documento
+	Numero        int     // sequencial da ordem
+	Inclusao      bool    // indica uma ordem extra, emitida fora da programação
 }
 
-// Emitter é responsável por enriquecer os dados básicos com metadados (EAN13, Seção)
-// e coordenar a gravação física do arquivo PDF através do Renderer.
-type Emitter struct {
-	cfg      Config
-	meta     map[string]ProdutoInfo
-	renderer Renderer
+// Emissor completa os dados básicos de uma ordem com os metadados do produto
+// (EAN13, seção e subgrupo) e coordena a gravação do arquivo por meio do
+// Renderizador.
+type Emissor struct {
+	configuracao Configuracao
+	metadados    map[string]InformacaoProduto
+	renderizador Renderizador
 }
 
-// Emitter realiza o ciclo completo de emissão de um documento:
-// 1. Busca metadados do produto.
-// 2. Prepara o mapa de dados (TemplateData).
-// 3. Define o caminho de saída e invoca o Renderer.
-func (e Emitter) Emit(ctx context.Context, req EmitRequest) (GeneratedFile, string, error) {
-	cod := normalizeCode(req.Codigo)
-	
-	// Tenta localizar o produto no mapa de metadados carregado do CSV.
-	produto, ok := e.lookupProduct(cod)
-	if !ok {
-		// Se não encontrar, retorna o código para que o Processor registre a falha.
-		return GeneratedFile{}, cod, nil
+// Emitir realiza o ciclo completo de emissão de uma ordem:
+//
+//  1. busca os metadados do produto;
+//  2. monta os dados do template;
+//  3. define o caminho de saída e chama o Renderizador.
+//
+// O segundo retorno só é preenchido quando o produto não existe nos
+// metadados. Nesse caso, ele contém o código normalizado, nenhum arquivo é
+// gravado e o erro é nulo, para que o Processador registre a ausência sem
+// interromper a execução.
+func (e Emissor) Emitir(ctx context.Context, pedido PedidoDeEmissao) (ArquivoGerado, string, error) {
+	codigo := normalizarCodigo(pedido.Codigo)
+
+	produto, encontrado := e.buscarProduto(codigo)
+	if !encontrado {
+		return ArquivoGerado{}, codigo, nil
 	}
 
-	// Monta o contexto que será injetado no PDF/Template.
-	data := TemplateData{
+	dados := DadosDoTemplate{
 		"CODIGO":     produto.Codigo,
-		"PRODUTO":    req.Descricao,
+		"PRODUTO":    pedido.Descricao,
 		"EAN13":      produto.EAN13,
 		"SECAO":      produto.Secao,
 		"SUBGRUPO":   produto.Subgrupo,
-		"DIA":        req.DataFormatada,
-		"EMISSAO":    req.DataEmissao,
-		"NUM":        emitNumber(req.Numero, req.Inclusao),
-		"QUANTIDADE": req.Quantidade,
+		"DIA":        pedido.DataFormatada,
+		"EMISSAO":    pedido.DataEmissao,
+		"NUM":        numeroDaOrdem(pedido.Numero, pedido.Inclusao),
+		"QUANTIDADE": pedido.Quantidade,
 	}
 
-	// local onde o PDF será salvo.
-	outputPath, err := e.outputPath(cod, req.DataFormatada, req.Inclusao)
+	caminho, err := e.caminhoDeSaida(codigo, pedido.DataFormatada, pedido.Inclusao)
 	if err != nil {
-		return GeneratedFile{}, "", err
+		return ArquivoGerado{}, "", err
 	}
 
-	// renderização física do arquivo.
-	if err := e.renderer.Render(ctx, outputPath, data); err != nil {
-		return GeneratedFile{}, "", err
+	if err := e.renderizador.Renderizar(ctx, caminho, dados); err != nil {
+		return ArquivoGerado{}, "", err
 	}
 
-	return GeneratedFile{
+	return ArquivoGerado{
 		Codigo:     produto.Codigo,
-		Produto:    req.Descricao,
-		Quantidade: req.Quantidade,
-		Data:       req.DataFormatada,
-		Path:       outputPath,
+		Produto:    pedido.Descricao,
+		Quantidade: pedido.Quantidade,
+		Data:       pedido.DataFormatada,
+		Caminho:    caminho,
 	}, "", nil
 }
 
-// outputPath calcula o caminho do arquivo e garante que a estrutura de pastas por data exista.
-func (e Emitter) outputPath(cod string, date string, inclusao bool) (string, error) {
-	base := e.cfg.FolderOPPCP
-	if inclusao && e.cfg.FolderOPInclusao != "" {
-		base = e.cfg.FolderOPInclusao
+// caminhoDeSaida calcula o caminho do arquivo e cria a pasta da data, se ela
+// ainda não existir. O nome segue o padrão "CODIGO [DATA].pdf".
+func (e Emissor) caminhoDeSaida(codigo string, data string, inclusao bool) (string, error) {
+	base := e.configuracao.PastaOrdensPCP
+	if inclusao && e.configuracao.PastaOrdensInclusao != "" {
+		base = e.configuracao.PastaOrdensInclusao
 	}
 
-	// Converte "Sexta — 29/05/2026" para "29.05.2026" para usar no nome da pasta e arquivo.
-	//ainda há necessidade de traduzir as datas sem perca de processamento, o desafio do momento pois o custo em segundos está caro!
-	dataArquivo := numericDateForPath(date)
-	
-	dir := filepath.Join(base, dataArquivo)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	// Converte "Sexta — 29/05/2026" em "29.05.2026" para uso em pasta e arquivo.
+	//
+	// TODO: converter a data sem perder desempenho; o custo por ficha ainda é alto.
+	dataParaCaminho := dataNumericaParaCaminho(data)
+
+	pasta := filepath.Join(base, dataParaCaminho)
+	if err := os.MkdirAll(pasta, 0o755); err != nil {
 		return "", err
 	}
 
-	// Nome do arquivo segue o padrão: CODIGO [DATA].pdf
-	name := fmt.Sprintf("%s [%s].pdf", cod, dataArquivo)
-	return filepath.Join(dir, name), nil
+	nome := fmt.Sprintf("%s [%s].pdf", codigo, dataParaCaminho)
+	return filepath.Join(pasta, nome), nil
 }
 
-// emitNumber formata o número da ordem ou indica se é uma inclusão.
-func emitNumber(n int, inclusao bool) string {
+// numeroDaOrdem formata o número impresso no rodapé da ficha. Para ordens de
+// inclusão, ele é o texto "inclusao".
+func numeroDaOrdem(numero int, inclusao bool) string {
 	if inclusao {
 		return "inclusao"
 	}
-	return fmt.Sprint(n)
+	return fmt.Sprint(numero)
 }
 
-// lookupProduct busca o produto no mapa de metadados. 
-// Possui uma lógica de fallback para tentar códigos com ou sem o dígito verificador separado por hífen.
-func (e Emitter) lookupProduct(cod string) (ProdutoInfo, bool) {
-	produto, ok := e.meta[cod]
-	if ok {
+// buscarProduto procura o produto nos metadados. Se o código não existir como
+// veio, tenta uma segunda vez com o dígito verificador separado por hífen,
+// porque a planilha pode trazer "1234" enquanto o CSV guarda "123-4".
+func (e Emissor) buscarProduto(codigo string) (InformacaoProduto, bool) {
+	produto, encontrado := e.metadados[codigo]
+	if encontrado {
 		return produto, true
 	}
-	
-	// Fallback: se o código veio "1234" mas no CSV está "123-4", tenta formatar.
-	formatted := formatCodeWithDigit(cod)
-	if formatted == cod {
-		return ProdutoInfo{}, false
+
+	comDigito := formatarCodigoComDigito(codigo)
+	if comDigito == codigo {
+		return InformacaoProduto{}, false
 	}
-	produto, ok = e.meta[formatted]
-	return produto, ok
+	produto, encontrado = e.metadados[comDigito]
+	return produto, encontrado
 }
 
-// formatCodeWithDigit tenta transformar "1234" em "123-4".
-func formatCodeWithDigit(cod string) string {
-	if len(cod) < 2 || containsHyphen(cod) {
-		return cod
+// formatarCodigoComDigito transforma "1234" em "123-4". Códigos com menos de
+// dois caracteres ou que já têm hífen são devolvidos sem alteração.
+func formatarCodigoComDigito(codigo string) string {
+	if len(codigo) < 2 || contemHifen(codigo) {
+		return codigo
 	}
-	return cod[:len(cod)-1] + "-" + cod[len(cod)-1:]
+	return codigo[:len(codigo)-1] + "-" + codigo[len(codigo)-1:]
 }
 
-// containsHyphen verifica se a string já possui um hífen.
-func containsHyphen(s string) bool {
-	for _, r := range s {
-		if r == '-' {
+// contemHifen informa se o texto tem pelo menos um hífen.
+func contemHifen(texto string) bool {
+	for _, caractere := range texto {
+		if caractere == '-' {
 			return true
 		}
 	}

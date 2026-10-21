@@ -2,12 +2,13 @@ package pcppdf
 
 import "errors"
 
+// Erros devolvidos pelo pacote. Use errors.Is para compará-los.
 var (
-	ErrMissingTemplateHTML = errors.New("template HTML nao informado")
-	ErrMissingPCPTabName   = errors.New("nome da aba PCP nao informado")
-	ErrMissingDateColumns  = errors.New("colunas de data/quantidade nao informadas")
-	ErrMissingOutputFolder = errors.New("pasta de saida PCP nao informada")
-	ErrMissingMetadataCSV  = errors.New("CSV de metadados nao informado")
-	ErrNilRenderer         = errors.New("renderer nao informado")
-	ErrUnsupportedWorkbook = errors.New("formato de planilha nao suportado diretamente; use .xlsx/.xlsm ou converta antes")
+	ErrTemplateHTMLAusente   = errors.New("template HTML nao informado")
+	ErrNomeAbaPCPAusente     = errors.New("nome da aba PCP nao informado")
+	ErrColunasDeDataAusentes = errors.New("colunas de data/quantidade nao informadas")
+	ErrPastaDeSaidaAusente   = errors.New("pasta de saida PCP nao informada")
+	ErrCSVMetadadosAusente   = errors.New("CSV de metadados nao informado")
+	ErrRenderizadorNulo      = errors.New("renderer nao informado")
+	ErrPlanilhaNaoSuportada  = errors.New("formato de planilha nao suportado diretamente; use .xlsx/.xlsm ou converta antes")
 )

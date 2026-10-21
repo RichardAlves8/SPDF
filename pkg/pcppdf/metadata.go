@@ -7,54 +7,58 @@ import (
 	"strings"
 )
 
-// LoadMetadataCSV lê um arquivo CSV contendo informações detalhadas dos produtos.
-// Este arquivo é essencial para o "enrichment" (enriquecimento), adicionando dados
-// como EAN13, Seção e Subgrupo que não existem na planilha de programação original.
-func LoadMetadataCSV(path string) (map[string]ProdutoInfo, error) {
-	f, err := os.Open(path)
+// CarregarCSVMetadados lê o CSV com as informações detalhadas dos produtos e
+// devolve um mapa indexado pelo código do produto.
+//
+// Os metadados completam a planilha de programação com dados que ela não tem:
+// EAN13, seção e subgrupo. O arquivo deve usar ponto e vírgula como separador
+// e ter o cabeçalho CODIGO;PRODUTO;EAN13;SECAO;SUBGRUPO. A primeira linha é
+// sempre descartada, e as linhas com menos de cinco campos são ignoradas. Se
+// um código aparecer mais de uma vez, vale a última ocorrência.
+func CarregarCSVMetadados(caminho string) (map[string]InformacaoProduto, error) {
+	arquivo, err := os.Open(caminho)
 	if err != nil {
 		return nil, err
 	}
-	defer f.Close()
+	defer arquivo.Close()
 
-	// Configura o leitor CSV para usar ponto-e-vírgula como delimitador,
-	// padrão comum em exportações de ERPs brasileiros.
-	reader := csv.NewReader(f)
-	reader.Comma = ';'
-	reader.FieldsPerRecord = -1 // Permite número variável de campos se necessário.
+	// O ponto e vírgula é o separador comum nas exportações de ERPs brasileiros.
+	leitor := csv.NewReader(arquivo)
+	leitor.Comma = ';'
+	// Aceita um número variável de campos por linha.
+	leitor.FieldsPerRecord = -1
 
-	meta := make(map[string]ProdutoInfo)
-	first := true
+	metadados := make(map[string]InformacaoProduto)
+	primeiraLinha := true
 	for {
-		record, err := reader.Read()
+		registro, err := leitor.Read()
 		if err == io.EOF {
 			break
 		}
 		if err != nil {
 			return nil, err
 		}
-		
-		// Pula a primeira linha (cabeçalho: CODIGO;PRODUTO;EAN13;SECAO;SUBGRUPO).
-		if first {
-			first = false
+
+		// A primeira linha é o cabeçalho.
+		if primeiraLinha {
+			primeiraLinha = false
 			continue
 		}
-		
-		// Garante que a linha possui os campos mínimos necessários.
-		if len(record) < 5 {
+
+		if len(registro) < 5 {
 			continue
 		}
-		
-		info := ProdutoInfo{
-			Codigo:   strings.TrimSpace(record[0]),
-			Nome:     strings.TrimSpace(record[1]),
-			EAN13:    strings.TrimSpace(record[2]),
-			Secao:    strings.TrimSpace(record[3]),
-			Subgrupo: strings.TrimSpace(record[4]),
+
+		informacao := InformacaoProduto{
+			Codigo:   strings.TrimSpace(registro[0]),
+			Nome:     strings.TrimSpace(registro[1]),
+			EAN13:    strings.TrimSpace(registro[2]),
+			Secao:    strings.TrimSpace(registro[3]),
+			Subgrupo: strings.TrimSpace(registro[4]),
 		}
-		
-		// Armazena no mapa usando o código como chave para busca rápida (O(1)).
-		meta[info.Codigo] = info
+
+		// O código é a chave do mapa para que a busca seja direta, em tempo constante.
+		metadados[informacao.Codigo] = informacao
 	}
-	return meta, nil
+	return metadados, nil
 }

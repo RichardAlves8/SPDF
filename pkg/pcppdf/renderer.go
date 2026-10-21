@@ -11,263 +11,269 @@ import (
 	"github.com/signintech/gopdf"
 )
 
-// Renderer define o contrato para os motores de geração de documentos.
-type Renderer interface {
-	// Render recebe os dados processados e os transforma em um arquivo físico.
-	Render(ctx context.Context, outputPath string, data TemplateData) error
+// Renderizador define o contrato dos motores que geram o documento final.
+type Renderizador interface {
+	// Renderizar transforma os dados já processados em um arquivo gravado em
+	// caminhoSaida.
+	Renderizar(ctx context.Context, caminhoSaida string, dados DadosDoTemplate) error
 }
 
-// GoPDFRenderer é o motor oficial de geração de PDFs. Ele desenha o layout
-// da ficha de produção manualmente para garantir precisão milimétrica e
+// RenderizadorGoPDF é o motor oficial de geração de PDF. Ele desenha o layout
+// da ficha de produção linha a linha, o que garante precisão milimétrica e
 // independência de drivers de impressão externos.
-type GoPDFRenderer struct {
-	FontDir string // Caminho para a pasta resources/templates/ (onde ficam as fontes)
+type RenderizadorGoPDF struct {
+	PastaFontes string // pasta que contém as fontes arial.ttf e Code39AzaleaRegular3.ttf
 }
 
-// Render desenha a ficha de produção em formato A4 Paisagem.
-func (r GoPDFRenderer) Render(ctx context.Context, outputPath string, data TemplateData) error {
+// Renderizar desenha a ficha de produção em A4 paisagem e a grava em
+// caminhoSaida. Ele devolve erro se alguma das duas fontes não for encontrada
+// em PastaFontes.
+//
+// Os campos usados de dados são CODIGO, PRODUTO, EAN13, SECAO, SUBGRUPO, DIA,
+// EMISSAO, NUM e QUANTIDADE.
+func (r RenderizadorGoPDF) Renderizar(ctx context.Context, caminhoSaida string, dados DadosDoTemplate) error {
 	pdf := gopdf.GoPdf{}
-	// A4 Landscape: 841.89 x 595.28 pontos.
+	// O A4 paisagem mede 841,89 x 595,28 pontos.
 	pdf.Start(gopdf.Config{PageSize: *gopdf.PageSizeA4Landscape})
 	pdf.AddPage()
 
-	pageW := gopdf.PageSizeA4Landscape.W
-	marginX := 20.0
-	contentW := pageW - (marginX * 2)
+	larguraPagina := gopdf.PageSizeA4Landscape.W
+	margemX := 20.0
+	larguraConteudo := larguraPagina - (margemX * 2)
 
-	// ── Carregamento de Fontes ────────────────────────────────────────────────
-	// O SPDF utiliza fontes embarcadas para garantir que o PDF seja o mesmo
-	// em qualquer computador (Windows, Linux, Mac).
-	arialPath := filepath.Join(r.FontDir, "arial.ttf")
-	if _, err := os.Stat(arialPath); err != nil {
-		return fmt.Errorf("Fonte (.ttf) não encontrada em: %s", r.FontDir)
+	// As fontes são embarcadas no PDF para que o documento seja o mesmo em
+	// qualquer computador (Windows, Linux ou Mac).
+	caminhoArial := filepath.Join(r.PastaFontes, "arial.ttf")
+	if _, err := os.Stat(caminhoArial); err != nil {
+		return fmt.Errorf("Fonte (.ttf) não encontrada em: %s", r.PastaFontes)
 	}
-	if err := pdf.AddTTFFont("arial", arialPath); err != nil {
+	if err := pdf.AddTTFFont("arial", caminhoArial); err != nil {
 		return fmt.Errorf("Erro ao carregar fonte arial: %v", err)
 	}
 
-	// Fonte específica para transformar texto em código de barras visual.
-	barcodeFontPath := filepath.Join(r.FontDir, "Code39AzaleaRegular3.ttf")
-	if _, err := os.Stat(barcodeFontPath); err != nil {
-		return fmt.Errorf("Fonte de código de barras não encontrada em %s", r.FontDir)
+	// Fonte que transforma o texto em código de barras visual.
+	caminhoFonteBarras := filepath.Join(r.PastaFontes, "Code39AzaleaRegular3.ttf")
+	if _, err := os.Stat(caminhoFonteBarras); err != nil {
+		return fmt.Errorf("Fonte de código de barras não encontrada em %s", r.PastaFontes)
 	}
-	if err := pdf.AddTTFFont("barcode", barcodeFontPath); err != nil {
+	if err := pdf.AddTTFFont("barcode", caminhoFonteBarras); err != nil {
 		return fmt.Errorf("Erro ao carregar fonte de barcode: %v", err)
 	}
 
-	// ── Helpers de Desenho ────────────────────────────────────────────────────
-	val := func(key string) string {
-		return valueString(data[key])
+	// valor devolve o campo dos dados como texto.
+	valor := func(chave string) string {
+		return valorComoTexto(dados[chave])
 	}
 
-	// drawCenteredText desenha um texto centralizado horizontalmente na página.
-	drawCenteredText := func(text string, y float64, size int, font string) {
-		pdf.SetFont(font, "", size)
-		width, _ := pdf.MeasureTextWidth(text)
-		x := (pageW - width) / 2
+	// desenharTextoCentralizado escreve o texto centralizado na largura da página.
+	desenharTextoCentralizado := func(texto string, y float64, tamanho int, fonte string) {
+		pdf.SetFont(fonte, "", tamanho)
+		largura, _ := pdf.MeasureTextWidth(texto)
+		x := (larguraPagina - largura) / 2
 		pdf.SetXY(x, y)
-		pdf.Cell(nil, text)
+		pdf.Cell(nil, texto)
 	}
 
-	// centerTextInCol desenha um texto centralizado dentro de uma coluna específica.
-	centerTextInCol := func(text string, colX, colW, y float64, size int, font string) {
-		pdf.SetFont(font, "", size)
-		tw, _ := pdf.MeasureTextWidth(text)
-		x := colX + (colW-tw)/2
+	// centralizarNaColuna escreve o texto centralizado dentro de uma coluna.
+	centralizarNaColuna := func(texto string, colunaX, larguraColuna, y float64, tamanho int, fonte string) {
+		pdf.SetFont(fonte, "", tamanho)
+		larguraTexto, _ := pdf.MeasureTextWidth(texto)
+		x := colunaX + (larguraColuna-larguraTexto)/2
 		pdf.SetXY(x, y)
-		pdf.Cell(nil, text)
+		pdf.Cell(nil, texto)
 	}
 
-	// ── 1. Cabeçalho (Header) ─────────────────────────────────────────────────
-	drawCenteredText("Departamento X — Setor Y", 28, 14, "arial")
-	drawCenteredText(fmt.Sprintf("Ordem de Produção — Emissão: %s", val("EMISSAO")), 46, 11, "arial")
+	// Cabeçalho: título do setor, data de emissão e linha separadora.
+	desenharTextoCentralizado("Departamento X — Setor Y", 28, 14, "arial")
+	desenharTextoCentralizado(fmt.Sprintf("Ordem de Produção — Emissão: %s", valor("EMISSAO")), 46, 11, "arial")
 
-	// Linha separadora horizontal.
 	pdf.SetStrokeColor(204, 204, 204)
 	pdf.SetLineWidth(0.5)
-	pdf.Line(marginX, 62, marginX+contentW, 62)
+	pdf.Line(margemX, 62, margemX+larguraConteudo, 62)
 
-	// ── 2. Destaque do Produto (Gray Box) ─────────────────────────────────────
-	destY := 67.0
-	destH := 50.0
+	// Destaque do produto: faixa cinza-escura com código e descrição.
+	destaqueY := 67.0
+	destaqueAltura := 50.0
 	pdf.SetFillColor(68, 68, 68)
-	pdf.RectFromUpperLeftWithStyle(marginX, destY, contentW, destH, "F")
+	pdf.RectFromUpperLeftWithStyle(margemX, destaqueY, larguraConteudo, destaqueAltura, "F")
 	pdf.SetTextColor(255, 255, 255)
 
-	productText := fmt.Sprintf("%s  |  %s", val("CODIGO"), val("PRODUTO"))
+	textoProduto := fmt.Sprintf("%s  |  %s", valor("CODIGO"), valor("PRODUTO"))
 	pdf.SetFont("arial", "", 18)
-	pw, _ := pdf.MeasureTextWidth(productText)
-	pdf.SetXY((pageW-pw)/2, destY+(destH-18)/2)
-	pdf.Cell(nil, productText)
+	larguraProduto, _ := pdf.MeasureTextWidth(textoProduto)
+	pdf.SetXY((larguraPagina-larguraProduto)/2, destaqueY+(destaqueAltura-18)/2)
+	pdf.Cell(nil, textoProduto)
 
-	pdf.SetTextColor(0, 0, 0) // Volta para cor preta.
+	// Volta para a cor preta.
+	pdf.SetTextColor(0, 0, 0)
 
-	// ── 3. Bloco de Informações Principais (Highlight Row) ────────────────────
-	// Dividido em 3 colunas: Data, Quantidade e Classificação.
-	hlY := destY + destH + 5
-	hlH := 65.0
-	colW := contentW / 3
-	col1X := marginX
-	col2X := marginX + colW
-	col3X := marginX + colW*2
+	// Informações principais, em três colunas: data, quantidade e classificação.
+	blocoY := destaqueY + destaqueAltura + 5
+	blocoAltura := 65.0
+	larguraColuna := larguraConteudo / 3
+	coluna1X := margemX
+	coluna2X := margemX + larguraColuna
+	coluna3X := margemX + larguraColuna*2
 
 	pdf.SetFillColor(238, 238, 238)
 	pdf.SetStrokeColor(204, 204, 204)
 	pdf.SetLineWidth(0.5)
-	pdf.RectFromUpperLeftWithStyle(marginX, hlY, contentW, hlH, "FD")
+	pdf.RectFromUpperLeftWithStyle(margemX, blocoY, larguraConteudo, blocoAltura, "FD")
 
-	// Linhas verticais separadoras de colunas.
-	pdf.Line(col2X, hlY, col2X, hlY+hlH)
-	pdf.Line(col3X, hlY, col3X, hlY+hlH)
+	// Linhas verticais que separam as colunas.
+	pdf.Line(coluna2X, blocoY, coluna2X, blocoY+blocoAltura)
+	pdf.Line(coluna3X, blocoY, coluna3X, blocoY+blocoAltura)
 
-	// Col 1: DATA
+	// Coluna 1: data.
 	pdf.SetFont("arial", "", 10)
-	labelW, _ := pdf.MeasureTextWidth("DATA")
-	pdf.SetXY(col1X+(colW-labelW)/2, hlY+10)
+	larguraRotuloData, _ := pdf.MeasureTextWidth("DATA")
+	pdf.SetXY(coluna1X+(larguraColuna-larguraRotuloData)/2, blocoY+10)
 	pdf.Cell(nil, "DATA")
-	centerTextInCol(val("DIA"), col1X, colW, hlY+28, 18, "arial")
+	centralizarNaColuna(valor("DIA"), coluna1X, larguraColuna, blocoY+28, 18, "arial")
 
-	// Col 2: QUANTIDADE
+	// Coluna 2: quantidade.
 	pdf.SetFont("arial", "", 10)
-	lbl2W, _ := pdf.MeasureTextWidth("QUANTIDADE NECESSÁRIA")
-	pdf.SetXY(col2X+(colW-lbl2W)/2, hlY+10)
+	larguraRotuloQuantidade, _ := pdf.MeasureTextWidth("QUANTIDADE NECESSÁRIA")
+	pdf.SetXY(coluna2X+(larguraColuna-larguraRotuloQuantidade)/2, blocoY+10)
 	pdf.Cell(nil, "QUANTIDADE NECESSÁRIA")
-	centerTextInCol(val("QUANTIDADE"), col2X, colW, hlY+28, 24, "arial")
+	centralizarNaColuna(valor("QUANTIDADE"), coluna2X, larguraColuna, blocoY+28, 24, "arial")
 
-	// Col 3: CLASSIFICAÇÃO
+	// Coluna 3: classificação.
 	pdf.SetFont("arial", "", 11)
-	lbl3a := fmt.Sprintf("CLASS/EST: %s", val("SECAO"))
-	lbl3b := fmt.Sprintf("TIPO: %s", val("SUBGRUPO"))
-	la3W, _ := pdf.MeasureTextWidth(lbl3a)
-	lb3W, _ := pdf.MeasureTextWidth(lbl3b)
-	pdf.SetXY(col3X+(colW-la3W)/2, hlY+20)
-	pdf.Cell(nil, lbl3a)
-	pdf.SetXY(col3X+(colW-lb3W)/2, hlY+38)
-	pdf.Cell(nil, lbl3b)
+	textoSecao := fmt.Sprintf("CLASS/EST: %s", valor("SECAO"))
+	textoTipo := fmt.Sprintf("TIPO: %s", valor("SUBGRUPO"))
+	larguraSecao, _ := pdf.MeasureTextWidth(textoSecao)
+	larguraTipo, _ := pdf.MeasureTextWidth(textoTipo)
+	pdf.SetXY(coluna3X+(larguraColuna-larguraSecao)/2, blocoY+20)
+	pdf.Cell(nil, textoSecao)
+	pdf.SetXY(coluna3X+(larguraColuna-larguraTipo)/2, blocoY+38)
+	pdf.Cell(nil, textoTipo)
 
-	// ── 4. Campos de Preenchimento Manual ─────────────────────────────────────
-	manualY := hlY + hlH + 8
+	// Campos de preenchimento manual: data de produção e responsável.
+	preenchimentoY := blocoY + blocoAltura + 8
 	pdf.SetFont("arial", "", 12)
-	pdf.SetXY(marginX, manualY)
+	pdf.SetXY(margemX, preenchimentoY)
 	pdf.Cell(nil, "DATA DE PRODUÇÃO: ________ / _________ / __________")
-	pdf.SetXY(marginX, manualY+20)
+	pdf.SetXY(margemX, preenchimentoY+20)
 	pdf.Cell(nil, "RESPONSÁVEL:")
 
-	// ── 5. Código de Barras (Barcode) ─────────────────────────────────────────
-	// começa e termina com * (para coletores de dados) *
-	bcY := manualY + 48
-	bcH := 80.0
-	bcX := 200.0
-	bcW := 440.0
+	// Código de barras.
+	barrasY := preenchimentoY + 48
+	barrasAltura := 80.0
+	barrasX := 200.0
+	barrasLargura := 440.0
 
 	pdf.SetFillColor(238, 238, 238)
 	pdf.SetStrokeColor(204, 204, 204)
 	pdf.SetLineWidth(0.5)
-	pdf.RectFromUpperLeftWithStyle(bcX, bcY, bcW, bcH, "FD")
+	pdf.RectFromUpperLeftWithStyle(barrasX, barrasY, barrasLargura, barrasAltura, "FD")
 
-	// Code39 requer asteriscos como caracteres de start/stop.
-	barcodeVal := fmt.Sprintf("*%s*", strings.TrimSpace(val("EAN13")))
+	// O Code39 exige asteriscos como caracteres de início e de fim, o que
+	// também permite a leitura pelos coletores de dados.
+	textoBarras := fmt.Sprintf("*%s*", strings.TrimSpace(valor("EAN13")))
 	pdf.SetFont("barcode", "", 50)
-	bw, _ := pdf.MeasureTextWidth(barcodeVal)
-	pdf.SetXY((pageW-bw)/2, bcY+8)
-	pdf.Cell(nil, barcodeVal)
+	larguraBarrasTexto, _ := pdf.MeasureTextWidth(textoBarras)
+	pdf.SetXY((larguraPagina-larguraBarrasTexto)/2, barrasY+8)
+	pdf.Cell(nil, textoBarras)
 
-	// Exibe o número EAN13 legível logo abaixo das barras.
-	ean13 := val("EAN13")
-	ean13Spaced := ""
-	for i, ch := range ean13 {
+	// Número do EAN13 legível, logo abaixo das barras.
+	ean13 := valor("EAN13")
+	ean13Espacado := ""
+	for i, digito := range ean13 {
 		if i > 0 {
-			ean13Spaced += " "
+			ean13Espacado += " "
 		}
-		ean13Spaced += string(ch)
+		ean13Espacado += string(digito)
 	}
 	pdf.SetFont("arial", "", 18)
-	nw, _ := pdf.MeasureTextWidth(ean13Spaced)
-	pdf.SetXY((pageW-nw)/2, bcY+bcH+6)
-	pdf.Cell(nil, ean13Spaced)
+	larguraEAN13, _ := pdf.MeasureTextWidth(ean13Espacado)
+	pdf.SetXY((larguraPagina-larguraEAN13)/2, barrasY+barrasAltura+6)
+	pdf.Cell(nil, ean13Espacado)
 
-	// ── 6. Área de Assinaturas e Conferência ──────────────────────────────────
-	sigY := bcY + bcH + 28
-	sigH := 65.0
+	// Assinaturas e conferência, em três colunas.
+	assinaturasY := barrasY + barrasAltura + 28
+	assinaturasAltura := 65.0
 
 	pdf.SetFillColor(238, 238, 238)
 	pdf.SetStrokeColor(204, 204, 204)
-	pdf.RectFromUpperLeftWithStyle(marginX, sigY, contentW, sigH, "FD")
+	pdf.RectFromUpperLeftWithStyle(margemX, assinaturasY, larguraConteudo, assinaturasAltura, "FD")
 
-	pdf.Line(col2X, sigY, col2X, sigY+sigH)
-	pdf.Line(col3X, sigY, col3X, sigY+sigH)
+	pdf.Line(coluna2X, assinaturasY, coluna2X, assinaturasY+assinaturasAltura)
+	pdf.Line(coluna3X, assinaturasY, coluna3X, assinaturasY+assinaturasAltura)
 
-	drawSigCol := func(label, line string, colX float64) {
+	// desenharColunaAssinatura escreve o rótulo e a linha de assinatura de uma coluna.
+	desenharColunaAssinatura := func(rotulo, linha string, colunaX float64) {
 		pdf.SetFont("arial", "", 10)
-		lw, _ := pdf.MeasureTextWidth(label)
-		pdf.SetXY(colX+(colW-lw)/2, sigY+10)
-		pdf.Cell(nil, label)
+		larguraRotulo, _ := pdf.MeasureTextWidth(rotulo)
+		pdf.SetXY(colunaX+(larguraColuna-larguraRotulo)/2, assinaturasY+10)
+		pdf.Cell(nil, rotulo)
 
 		pdf.SetFont("arial", "", 11)
-		uw, _ := pdf.MeasureTextWidth(line)
-		pdf.SetXY(colX+(colW-uw)/2, sigY+42)
-		pdf.Cell(nil, line)
+		larguraLinha, _ := pdf.MeasureTextWidth(linha)
+		pdf.SetXY(colunaX+(larguraColuna-larguraLinha)/2, assinaturasY+42)
+		pdf.Cell(nil, linha)
 	}
 
-	drawSigCol("QUANTIDADE PRODUZIDA", "_________________________", col1X)
-	drawSigCol("ACOMPANHADO POR", "_________________________", col2X)
-	drawSigCol("CONFERIDO POR", "_________________________", col3X)
+	desenharColunaAssinatura("QUANTIDADE PRODUZIDA", "_________________________", coluna1X)
+	desenharColunaAssinatura("ACOMPANHADO POR", "_________________________", coluna2X)
+	desenharColunaAssinatura("CONFERIDO POR", "_________________________", coluna3X)
 
-	// ── 7. Campo de Observações ───────────────────────────────────────────────
-	obsY := sigY + sigH + 8
+	// Campo de observações.
+	observacoesY := assinaturasY + assinaturasAltura + 8
 	pdf.SetFont("arial", "", 12)
-	pdf.SetXY(marginX, obsY)
+	pdf.SetXY(margemX, observacoesY)
 	pdf.Cell(nil, "OBSERVAÇÕES:")
-	pdf.RectFromUpperLeftWithStyle(marginX, obsY+14, contentW, 40, "D")
+	pdf.RectFromUpperLeftWithStyle(margemX, observacoesY+14, larguraConteudo, 40, "D")
 
-	// ── 8. Rodapé (Footer) ────────────────────────────────────────────────────
+	// Rodapé: número da ordem, alinhado à direita.
 	pdf.SetFont("arial", "", 7)
 	pdf.SetTextColor(160, 160, 160)
-	numText := val("NUM")
-	ntw, _ := pdf.MeasureTextWidth(numText)
-	pdf.SetXY(pageW-marginX-ntw, gopdf.PageSizeA4Landscape.H-12)
-	pdf.Cell(nil, numText)
+	textoNumero := valor("NUM")
+	larguraNumero, _ := pdf.MeasureTextWidth(textoNumero)
+	pdf.SetXY(larguraPagina-margemX-larguraNumero, gopdf.PageSizeA4Landscape.H-12)
+	pdf.Cell(nil, textoNumero)
 
-	// Finaliza e grava o arquivo no disco.
-	return pdf.WritePdf(outputPath)
+	return pdf.WritePdf(caminhoSaida)
 }
 
-// FileRenderer é um motor alternativo que gera arquivos HTML ou arquivos de texto
-// baseado na substituição de variáveis {{CHAVE}} em um arquivo base.
-type FileRenderer struct {
-	TemplatePath string
+// RenderizadorArquivo é o motor alternativo que gera arquivos HTML ou de texto
+// a partir de um arquivo-base, substituindo as variáveis no formato {{CHAVE}}.
+type RenderizadorArquivo struct {
+	CaminhoTemplate string // caminho do arquivo-base com os marcadores {{CHAVE}}
 }
 
-// Render carrega o template HTML, substitui os placeholders pelos valores reais
-// e salva o resultado no caminho de saída.
-func (f FileRenderer) Render(_ context.Context, outputPath string, data TemplateData) error {
-	if err := os.MkdirAll(filepath.Dir(outputPath), 0o755); err != nil {
+// Renderizar carrega o template, substitui os marcadores pelos valores de
+// dados e grava o resultado em caminhoSaida, criando a pasta se necessário.
+func (r RenderizadorArquivo) Renderizar(_ context.Context, caminhoSaida string, dados DadosDoTemplate) error {
+	if err := os.MkdirAll(filepath.Dir(caminhoSaida), 0o755); err != nil {
 		return err
 	}
-	html, err := renderTemplateHTML(f.TemplatePath, data)
+	conteudo, err := renderizarTemplateHTML(r.CaminhoTemplate, dados)
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(outputPath, []byte(html), 0o644)
+	return os.WriteFile(caminhoSaida, []byte(conteudo), 0o644)
 }
 
-// renderTemplateHTML lê o arquivo de template e faz o Replace de todas as chaves encontradas.
-func renderTemplateHTML(templatePath string, data TemplateData) (string, error) {
-	content, err := os.ReadFile(templatePath)
+// renderizarTemplateHTML lê o template e substitui cada marcador {{CHAVE}} pelo
+// valor correspondente em dados. Marcadores sem valor em dados permanecem no
+// texto.
+func renderizarTemplateHTML(caminhoTemplate string, dados DadosDoTemplate) (string, error) {
+	bytesTemplate, err := os.ReadFile(caminhoTemplate)
 	if err != nil {
 		return "", err
 	}
-	html := string(content)
-	
-	// Ordenamos as chaves para garantir substituições consistentes.
-	keys := make([]string, 0, len(data))
-	for key := range data {
-		keys = append(keys, key)
+	conteudo := string(bytesTemplate)
+
+	// As chaves são ordenadas para que a substituição seja sempre a mesma.
+	chaves := make([]string, 0, len(dados))
+	for chave := range dados {
+		chaves = append(chaves, chave)
 	}
-	sort.Strings(keys)
-	
-	for _, key := range keys {
-		html = strings.ReplaceAll(html, "{{"+key+"}}", valueString(data[key]))
+	sort.Strings(chaves)
+
+	for _, chave := range chaves {
+		conteudo = strings.ReplaceAll(conteudo, "{{"+chave+"}}", valorComoTexto(dados[chave]))
 	}
-	return html, nil
+	return conteudo, nil
 }

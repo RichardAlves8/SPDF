@@ -1,169 +1,129 @@
+# SPDF: fichas de produção em PDF
 
+### Sumário
+- [`1.`](#1-resumo) **Resumo**
 
-## Origem — Security PDF
+- [`2.`](#2-origem) **Origem**
 
-Diariamente, o responsável pela emissão de ordens de produção separava entre uma e duas horas para realizar um processo inteiramente manual: copiar o código da planilha de programação, colar no template de ficha e imprimir — uma ficha por vez. Em períodos sazonais, essa carga podia ultrapassar as duas horas com facilidade podendo chegar de 200 até 500 ordens por dia.
+- [`3.`](#3-primeira-execução) **Primeira execução**
 
-### Resumo do processo manual
+- [`4.`](#4-para-ir-além) **Para ir além**
 
-```mermaid
-flowchart LR
-    A[Planilha\nde programação] -->|Ctrl+C| B[Template\nde ficha]
-    B -->|Ctrl+P| C[Ficha\nimpressa]
-    C -.->|de uma em uma| A
-```
+- [`5.`](#5-observações-finais) **Observações finais**
 
-Por se tratar de documentos destinados ao controle de produção, qualquer erro tinha impacto direto no processo fabril. No entanto, por ser algo manual, a tarefa era ao mesmo tempo repetitiva e suscetível a falhas operacionais.
+- [`6.`](#6-agradecimentos) **Agradecimentos**
 
-E por isso precisava ser algo seguro para este processo, dali o nome SPDF.
+## 1. Resumo
 
-O projeto nasceu da observação de que, apesar da sensibilidade dos documentos gerados, o fluxo era inteiramente automatizável — e aprimorável. Com a solução implementada, mais de 80% dos problemas operacionais foram eliminados. Falhas agora ocorrem apenas em situações de exceção muito raras, e a diferença em relação ao processo anterior é discrepante.
-*Pode parecer algo simples, mas SPDF mudou a forma como trabalhavamos diariamente.*
-## Agradecimentos
-
-Ao time de Programação e Controle de Produção *(PCP)* pelo apoio durante o desenvolvimento —
-os reais responsáveis por todo o processo. Foi um dos projetos mais divertidos
-que já trabalhei em equipe, e eles mudaram a forma como enxergo colaboração
-e desenvolvimento. Grande parceria. 
-
-
----
-
-## Resumo e início do Projeto
+O SPDF lê uma planilha de programação de produção e gera uma ficha em PDF para cada ordem: uma página A4 em paisagem com o código e a descrição do produto, a data, a quantidade necessária, a classificação, o código de barras e os campos de preenchimento manual. Você aponta para a planilha, para um CSV com os dados cadastrais dos produtos, e ele devolve as fichas organizadas em uma pasta por data.
 
 ```mermaid
 flowchart TD
-    cmd[cmd/main.go]
-    cmd --> proc
+    cmd["cmd/main.go"] --> proc
 
-    subgraph pkg/pcppdf
-        in[Planilha] --> proc[processor.go]
-        proc --> emit[emitter.go]
-        emit --> rend[renderer.go]
+    subgraph pkg["pkg/pcppdf"]
+        in["Planilha .xlsx / .xlsm"] --> proc["Processador"]
+        csv["CSV de metadados"] --> emit
+        proc --> emit["Emissor"]
+        emit --> rend["Renderizador"]
     end
 
-    rend --> pdf[PDF]
-    res[resources/] --> rend
+    rend --> pdf["PDF por ordem"]
+    res["resources/templates"] --> rend
 ```
 
-O `cmd/main.go` atua como ponto de entrada da CLI, orquestrando o pacote `pkg/pcppdf`. Dentro dele, o pipeline segue uma direção linear: o `processor.go` lê e normaliza os dados da planilha, o `emitter.go` converte esses dados em contexto de renderização, e o `renderer.go` gera o PDF final — consumindo os templates, estilos e fontes em `resources/`.
+O `cmd/main.go` é a porta de entrada da linha de comando e conduz o pacote `pkg/pcppdf`. Dentro dele, o fluxo segue uma direção só: o `Processador` lê a planilha e separa as linhas com produção, o `Emissor` completa cada ordem com os dados do CSV e o `Renderizador` desenha o PDF usando as fontes de `resources/templates`.
 
----
+Para rodar, você precisa do Go 1.22 ou superior. Todo o resto vem pelos módulos do Go.
 
-## Pré-requisitos
+## 2. Origem
 
-- **Go (Golang):** Versão 1.22 ou superior.
-- **Bibliotecas:** `excelize/v2` para leitura de Excel e `gopdf` para geração de documentos. Via Go Modules.
+Diariamente, o responsável pela emissão de ordens de produção separava entre uma e duas horas para realizar um processo inteiramente manual: copiar o código da planilha de programação, colar no template de ficha e imprimir, uma ficha por vez. Em períodos sazonais, essa carga podia ultrapassar as duas horas com facilidade, chegando de 200 a 500 ordens por dia.
 
-Para instalar as dependências Go e garantir que o ambiente esteja pronto:
-```bash
-#Sincronizar dependências do projeto
-go mod tidy
-
-# Bibliotecas principais:
-go get github.com/xuri/excelize/v2
-go get github.com/signintech/gopdf
+```mermaid
+flowchart LR
+    A["Planilha de programação"] -->|Ctrl+C| B["Template de ficha"]
+    B -->|Ctrl+P| C["Ficha impressa"]
+    C -.->|de uma em uma| A
 ```
 
----
+Por se tratar de documentos destinados ao controle de produção, qualquer erro tinha impacto direto no processo fabril. Como o trabalho era manual, a tarefa era ao mesmo tempo repetitiva e suscetível a falhas operacionais. Era preciso um processo seguro, e daí vem o nome: SPDF, de *Security PDF*.
 
-## Parâmetros principais
+O projeto nasceu da observação de que, apesar da sensibilidade dos documentos gerados, o fluxo era inteiramente automatizável e aprimorável. Com a solução implementada, mais de 80% dos problemas operacionais foram eliminados. As falhas agora ocorrem apenas em situações de exceção muito raras, e a diferença em relação ao processo anterior é grande.
 
-Configuráveis `Makefile` e flags CLI.
+*Pode parecer algo simples, mas o SPDF mudou a forma como trabalhávamos diariamente.*
 
-| Parâmetro | Tipo | Descrição |
-|-----------|------|-----------|
-| `XLS` | `string` | Caminho do arquivo `.xlsm` |
-| `SHEET` | `string` | Nome da aba (ex: `"RELATÓRIO PP GERAL"`) |
-| `DATE_COLS` | `[]int` | Índices das colunas com quantidades de produção (base zero) |
-| `CODE_COL` | `int` | Índice da coluna do código do produto |
-| `DESC_COL` | `int` | Índice da coluna da descrição |
-| `START_LINE` | `int` | Linha onde começam os dados dos produtos |
-| `DATE_LINE` | `int` | Linha onde estão os cabeçalhos de data |
-| `LOG` | `bool` | Emite log como proxy de I/O |
-| `LOG_DIR` | `string` | Caminho do arquivo de log a ser salvo |
-| `VERBOSE` | `bool` | Exibe resultado detalhado no terminal após a execução |
+## 3. Primeira execução
 
----
+Vamos gerar as fichas de uma planilha de exemplo que já vem no repositório. Os comandos abaixo valem para Linux e macOS; no Windows, use o terminal que preferir, desde que tenha o `make` (ou rode o `go run` direto, mostrado mais adiante).
 
-## Estrutura do projeto
-
-```
-.
-├── cmd/
-│   └── main.go                  # Ponto de entrada da CLI; parse de flags; orquestra o pacote pcppdf
-│
-├── pkg/pcppdf/
-│   ├── processor.go             # Leitura e iteração sobre a planilha; normalização de registros
-│   ├── emitter.go               # Converte modelos em contexto de renderização para templates e PDF
-│   ├── renderer.go              # Gera o PDF final; trata paginação e exportação
-│   ├── metadata.go              # Extração e normalização de metadados (datas, códigos, descrições)
-│   ├── format.go                # Formatação de datas, números e códigos de barras
-│   ├── config.go                # Carregamento de configurações e caminhos (templates, fontes, render)
-│   ├── options.go               # Flags e opções do módulo (diretório de saída, template a usar)
-│   ├── types.go                 # Structs e tipos centrais do domínio (Produto, Lote, Ficha...)
-│   ├── errors.go                # Erros customizados e helpers para propagação de falhas
-│   └── *_test.go                # Testes unitários de parsing, formatação e integração
-│
-├── resources/
-│   ├── templates/
-│   │   ├── template.html        # Layout base do PDF
-│   │   ├── style.css            # Estilos aplicados durante a renderização
-│   │   ├── arial.ttf            # Fonte embarcada para render consistente
-│   │   └── Code39AzaleaRegular3.ttf  # Fonte para geração de códigos de barras
-│   └── meta/
-│       ├── qsort.CSV            # Arquivo auxiliar para exemplos e testes
-│       └── dados.CSV            # Arquivo auxiliar para exemplos e testes
-│
-├── go.mod
-└── go.sum
-```
-
----
-
-## Exemplo de uso (Linux)
+**1. Baixe as dependências.**
 
 ```bash
-# Executar todos os testes
-go test ./...
+go mod download
+```
 
-# Processar uma planilha de exemplo — Mais detalhes de parâmetros na tabela a cima
+**2. Dê uma olhada na planilha.** Antes de gerar qualquer coisa, vale conferir em quais colunas estão o código, a descrição e as quantidades. O modo de inspeção lista o que há nas primeiras linhas:
+
+```bash
+make inspect FILE=resources/metalurgica.bicicletas/dFato.xlsm
+```
+
+Cada linha de saída traz o índice da coluna (começando em zero) e o conteúdo da célula. Esses índices são os mesmos que as flags `-code-col`, `-desc-col` e `-date-cols` esperam.
+
+**3. Gere as fichas.**
+
+```bash
+make pdfs OUT=out/
+```
+
+O `Makefile` já traz os índices corretos para a planilha de exemplo. Ao final, o terminal mostra um resumo:
+
+```
+--- Resumo Final ---
+Linhas com produção identificadas: 26
+Total de ordens individuais: 182
+Fichas PDF geradas com sucesso: 182
+Produtos ausentes no cadastro (CSV): 0
+```
+
+Em um teste com essa planilha, as 182 fichas saíram em cerca de cinco segundos.
+
+**4. Abra uma ficha.** As fichas ficam em `out/<data>/<CODIGO> [<data>].pdf`. Na planilha de exemplo, as datas vêm no formato `2024-06-03`, então a primeira ficha é `out/20240603/10001-1 [20240603].pdf`. Se a sua planilha trouxer datas como `03/06/2024`, o nome da pasta fica `03.06.2024` e a ficha mostra também o dia da semana.
+
+Sem o `make`, o mesmo comando é:
+
+```bash
 go run ./cmd \
-    -xls "caminho da planilha" \
-    -sheet "Descrição da aba em que se encontra os dados" \
-    -date-cols "Coluna com dados de quantidade" \
-    -code-col "Coluna de Código Item" \
-    -desc-col "Coluna de Descrição" \
-    -start-line "Linha de ínicio (para desconsiderar o cabeçalho)" \
-    -date-line "Linha onde se encontram as datas" \
-    -meta "Arquivo CSV de meta dados dos produtos (dim_Item)" \
-    -template "template.html" \
-    -out "Pasta de saída" \
-    -verbose=true/false \
-    -log=true/false \
-    -log-dir "saída de log"
-#Inspeçaõ de planilha, o uso desta função foi feito para garantir que
-#Os parametros passados estavam de acordo com as necessidades (caso houvesse alguma alteração na planilha)
-o run ./cmd \
-    -xls "caminho da planilha" \
-    -sheet "Descrição da aba" \
-    -inspect \
-    -inspect-rows "linhas para inspecionar" \
-    -inspect-cols "colunas"
+    -xls "resources/metalurgica.bicicletas/dFato.xlsm" \
+    -sheet "RELATORIO PP GERAL" \
+    -date-cols "12,15,18,21,24,27,30" \
+    -code-col 2 -desc-col 3 -start-line 5 -date-line 0 \
+    -meta "resources/metalurgica.bicicletas/dim_Items.CSV" \
+    -template "resources/templates/template.html" \
+    -out "out/"
 ```
 
----
+Para testar o código, rode `go test ./...`.
 
-## Notas de desenvolvimento
+## 4. Para ir além
 
-> **Memória com Excelize:** utilize sempre `Rows()` com streaming. Nunca use `GetRows()` ou `GetCellValue()` dentro de loops grandes — ambos carregam a planilha inteira na memória e estouram a RAM em ambientes com recursos limitados.
+A documentação técnica completa está em [`docs/Codigo.md`](docs/Codigo.md). Ela explica como cada etapa funciona, lista todos os parâmetros e tipos, descreve o que acontece quando algo dá errado e mostra como adaptar o projeto à sua planilha.
 
-### Observações Finais
+| Quero... | Vá para |
+|---|---|
+| Entender o que cada flag faz | [Execução](docs/Codigo.md#31-execução) e [Configuração](docs/Codigo.md#32-configuração) |
+| Adaptar o SPDF a outra planilha | [Como adaptar a uma nova planilha](docs/Codigo.md#71-como-adaptar-a-uma-nova-planilha) |
+| Acrescentar um campo à ficha | [Como acrescentar um campo à ficha](docs/Codigo.md#72-como-acrescentar-um-campo-à-ficha) |
+| Saber o que acontece em caso de erro | [Tratamento de erros](docs/Codigo.md#5-tratamento-de-erros) |
+| Conhecer os limites do projeto | [Garantias e limitações](docs/Codigo.md#6-garantias-e-limitações) |
 
-Este repositório representa apenas uma parte do todo (no entanto, a mais importante, e que resolve o problema). O SPDF completo possui
-interface gráfica e foi desenvolvido em Java com Apache POI, conexão JDBC para
-metadados atualizados e arquivos de configuração *(strings de conexão e acesso a outros servidores)* criptografados em AES-GCM.
+## 5. Observações finais
 
-O Original também contem cache de arquivos metadados — necessário porque no
-setor de produção é comum operadores abrirem o sistema repetidamente para emitir
-inclusões (pedidos fora da programação semanal ou por encomenda).
+Este repositório representa apenas uma parte do todo (no entanto, a mais importante, e a que resolve o problema). O SPDF completo possui interface gráfica e foi desenvolvido em Java com Apache POI, conexão JDBC para metadados atualizados e arquivos de configuração (strings de conexão e acesso a outros servidores) criptografados em AES-GCM.
+
+O original também contém cache de arquivos de metadados. Ele é necessário porque, no setor de produção, é comum os operadores abrirem o sistema repetidamente para emitir inclusões (pedidos fora da programação semanal ou por encomenda).
+
+## 6. Agradecimentos
+
+Ao time de Programação e Controle de Produção *(PCP)*, pelo apoio durante o desenvolvimento: os reais responsáveis por todo o processo. Foi um dos projetos mais divertidos que já trabalhei em equipe, e eles mudaram a forma como enxergo colaboração e desenvolvimento. Grande parceria.

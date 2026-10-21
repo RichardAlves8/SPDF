@@ -7,8 +7,8 @@ import (
 	"time"
 )
 
-// weekdaysPTBR mapeia os dias da semana para o português brasileiro.
-var weekdaysPTBR = map[time.Weekday]string{
+// diasDaSemanaPTBR traduz os dias da semana para o português do Brasil.
+var diasDaSemanaPTBR = map[time.Weekday]string{
 	time.Sunday:    "Domingo",
 	time.Monday:    "Segunda",
 	time.Tuesday:   "Terça",
@@ -18,70 +18,76 @@ var weekdaysPTBR = map[time.Weekday]string{
 	time.Saturday:  "Sábado",
 }
 
-// normalizeCode remove espaços em branco e o sufixo decimal ".0" que o Excel
-// costuma adicionar a códigos numéricos.
-func normalizeCode(v string) string {
-	v = strings.TrimSpace(v)
-	return strings.TrimSuffix(v, ".0")
+// normalizarCodigo remove os espaços das pontas e o sufixo decimal ".0" que o
+// Excel costuma acrescentar a códigos numéricos.
+func normalizarCodigo(valor string) string {
+	valor = strings.TrimSpace(valor)
+	return strings.TrimSuffix(valor, ".0")
 }
 
-// parseFloat converte strings numéricas para float64, tratando o padrão
-// brasileiro de vírgula como separador decimal.
-func parseFloat(v string) float64 {
-	v = strings.TrimSpace(v)
-	if v == "" || v == "0" {
+// converterDecimal converte um texto numérico em float64, aceitando a vírgula
+// como separador decimal, como no padrão brasileiro. Texto vazio, "0" ou
+// inválido resulta em zero. Números com ponto como separador de milhar, como
+// "1.500,50", não são reconhecidos e também resultam em zero.
+func converterDecimal(valor string) float64 {
+	valor = strings.TrimSpace(valor)
+	if valor == "" || valor == "0" {
 		return 0
 	}
-	// Normaliza para o padrão do Go (ponto como separador).
-	v = strings.ReplaceAll(v, ",", ".")
-	f, err := strconv.ParseFloat(v, 64)
+	// O Go espera o ponto como separador decimal.
+	valor = strings.ReplaceAll(valor, ",", ".")
+	numero, err := strconv.ParseFloat(valor, 64)
 	if err != nil {
 		return 0
 	}
-	return f
+	return numero
 }
 
-// formatDatePTBR transforma uma string de data (ex: 29/05/2026) em uma string
-// amigável com o dia da semana (ex: Sexta — 29/05/2026).
-func formatDatePTBR(raw string) string {
-	// Algumas planilhas podem usar ponto como separador (29.05.2026).
-	raw = strings.TrimSpace(strings.ReplaceAll(raw, ".", "/"))
-	if raw == "" {
-		return raw
+// formatarDataPTBR transforma uma data como "29/05/2026" em um texto com o dia
+// da semana, como "Sexta — 29/05/2026". O ponto também é aceito como
+// separador. Se o texto não estiver no formato DD/MM/AAAA, ele é devolvido sem
+// alteração, apenas sem os espaços das pontas.
+func formatarDataPTBR(bruta string) string {
+	bruta = strings.TrimSpace(strings.ReplaceAll(bruta, ".", "/"))
+	if bruta == "" {
+		return bruta
 	}
-	t, err := time.Parse("02/01/2006", raw)
+	data, err := time.Parse("02/01/2006", bruta)
 	if err != nil {
-		return raw
+		return bruta
 	}
-	return fmt.Sprintf("%s — %s", weekdaysPTBR[t.Weekday()], t.Format("02/01/2006"))
+	return fmt.Sprintf("%s — %s", diasDaSemanaPTBR[data.Weekday()], data.Format("02/01/2006"))
 }
 
-// numericDateForPath limpa a string de data para ser usada em nomes de pastas e arquivos,
-// removendo textos e garantindo que o separador seja o ponto (padrão do projeto: 29.05.2026).
-func numericDateForPath(date string) string {
-	var b strings.Builder
-	for _, r := range date {
-		if (r >= '0' && r <= '9') || r == '.' || r == '/' {
-			if r == '/' {
-				b.WriteRune('.')
+// dataNumericaParaCaminho mantém apenas os dígitos, os pontos e as barras da
+// data, e troca as barras por pontos. O resultado serve para nomes de pasta e
+// de arquivo, no padrão do projeto: "Sexta — 29/05/2026" vira "29.05.2026".
+func dataNumericaParaCaminho(data string) string {
+	var construtor strings.Builder
+	for _, caractere := range data {
+		if (caractere >= '0' && caractere <= '9') || caractere == '.' || caractere == '/' {
+			if caractere == '/' {
+				construtor.WriteRune('.')
 			} else {
-				b.WriteRune(r)
+				construtor.WriteRune(caractere)
 			}
 		}
 	}
-	return b.String()
+	return construtor.String()
 }
 
-// dateFolderForPath é um helper simples para normalizar caminhos de pasta baseados em data.
-func dateFolderForPath(date string) string {
-	return strings.ReplaceAll(strings.TrimSpace(date), "/", ".")
+// pastaDeDataParaCaminho troca as barras da data por pontos, sem remover o
+// restante do texto. Diferente de dataNumericaParaCaminho, ela preserva o dia
+// da semana.
+func pastaDeDataParaCaminho(data string) string {
+	return strings.ReplaceAll(strings.TrimSpace(data), "/", ".")
 }
 
-// valueString converte qualquer valor para string, tratando nil como string vazia.
-// Útil para garantir que a injeção de dados no template não falhe.
-func valueString(v any) string {
-	if v == nil {
+// valorComoTexto converte qualquer valor em texto, tratando nil como texto
+// vazio, para que a inserção de dados no template nunca falhe.
+func valorComoTexto(valor any) string {
+	if valor == nil {
 		return ""
 	}
-	return fmt.Sprint(v)
+	return fmt.Sprint(valor)
 }

@@ -6,23 +6,25 @@ import (
 	"testing"
 )
 
-func TestLoadMetadataCSV(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "dados.csv")
-	content := "CODIGO;PRODUTO;EAN13;SECAO;SUBGRUPO\n123-4;Produto Teste;789;17;Pratos\n"
-	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+// TestCarregarCSVMetadados verifica se o cabeçalho é descartado e se os campos
+// do produto são lidos nas colunas certas.
+func TestCarregarCSVMetadados(t *testing.T) {
+	pasta := t.TempDir()
+	caminho := filepath.Join(pasta, "dados.csv")
+	conteudo := "CODIGO;PRODUTO;EAN13;SECAO;SUBGRUPO\n123-4;Produto Teste;789;17;Pratos\n"
+	if err := os.WriteFile(caminho, []byte(conteudo), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
-	meta, err := LoadMetadataCSV(path)
+	metadados, err := CarregarCSVMetadados(caminho)
 	if err != nil {
 		t.Fatal(err)
 	}
-	got, ok := meta["123-4"]
-	if !ok {
+	obtido, encontrado := metadados["123-4"]
+	if !encontrado {
 		t.Fatal("produto nao carregado")
 	}
-	if got.Nome != "Produto Teste" || got.EAN13 != "789" {
-		t.Fatalf("produto inesperado: %#v", got)
+	if obtido.Nome != "Produto Teste" || obtido.EAN13 != "789" {
+		t.Fatalf("produto inesperado: %#v", obtido)
 	}
 }

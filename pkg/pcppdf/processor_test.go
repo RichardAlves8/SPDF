@@ -9,83 +9,88 @@ import (
 	"github.com/xuri/excelize/v2"
 )
 
-func TestProcessorProcessFile(t *testing.T) {
-	dir := t.TempDir()
-	metaPath := filepath.Join(dir, "dados.csv")
-	if err := os.WriteFile(metaPath, []byte("CODIGO;PRODUTO;EAN13;SECAO;SUBGRUPO\n123-4;Produto Meta;789;17;Pratos\n"), 0o644); err != nil {
+// TestProcessadorProcessarArquivo percorre o fluxo completo com uma planilha
+// de duas linhas: um produto cadastrado e outro ausente do CSV. Usa o
+// RenderizadorArquivo para que o conteúdo gerado possa ser lido como texto.
+func TestProcessadorProcessarArquivo(t *testing.T) {
+	pasta := t.TempDir()
+	caminhoMetadados := filepath.Join(pasta, "dados.csv")
+	if err := os.WriteFile(caminhoMetadados, []byte("CODIGO;PRODUTO;EAN13;SECAO;SUBGRUPO\n123-4;Produto Meta;789;17;Pratos\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
-	templatePath := filepath.Join(dir, "template.html")
-	if err := os.WriteFile(templatePath, []byte("{{CODIGO}} {{PRODUTO}}"), 0o644); err != nil {
+	caminhoTemplate := filepath.Join(pasta, "template.html")
+	if err := os.WriteFile(caminhoTemplate, []byte("{{CODIGO}} {{PRODUTO}}"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
-	xlsxPath := filepath.Join(dir, "pcp.xlsx")
-	f := excelize.NewFile()
-	const sheet = "PCP"
-	f.SetSheetName("Sheet1", sheet)
-	mustSetCell(t, f, sheet, "C1", "29/05/2026")
-	mustSetCell(t, f, sheet, "A2", "123-4")
-	mustSetCell(t, f, sheet, "B2", "Produto Planilha")
-	mustSetCell(t, f, sheet, "C2", 10)
-	mustSetCell(t, f, sheet, "A3", "999-9")
-	mustSetCell(t, f, sheet, "B3", "Produto Ausente")
-	mustSetCell(t, f, sheet, "C3", 5)
-	if err := f.SaveAs(xlsxPath); err != nil {
+	caminhoPlanilha := filepath.Join(pasta, "pcp.xlsx")
+	planilha := excelize.NewFile()
+	const aba = "PCP"
+	planilha.SetSheetName("Sheet1", aba)
+	definirCelulaOuFalhar(t, planilha, aba, "C1", "29/05/2026")
+	definirCelulaOuFalhar(t, planilha, aba, "A2", "123-4")
+	definirCelulaOuFalhar(t, planilha, aba, "B2", "Produto Planilha")
+	definirCelulaOuFalhar(t, planilha, aba, "C2", 10)
+	definirCelulaOuFalhar(t, planilha, aba, "A3", "999-9")
+	definirCelulaOuFalhar(t, planilha, aba, "B3", "Produto Ausente")
+	definirCelulaOuFalhar(t, planilha, aba, "C3", 5)
+	if err := planilha.SaveAs(caminhoPlanilha); err != nil {
 		t.Fatal(err)
 	}
 
-	cfg := Config{
-		TemplateHTML:     templatePath,
-		MetaCSVFile:      metaPath,
-		PCPTabName:       sheet,
-		ListColumnData:   []int{2},
-		IndexColumnCod:   0,
-		IndexColItemDesc: 1,
-		IndexStartLine:   1,
-		FolderOPPCP:      filepath.Join(dir, "out"),
+	configuracao := Configuracao{
+		CaminhoTemplateHTML:  caminhoTemplate,
+		CaminhoCSVMetadados:  caminhoMetadados,
+		NomeAbaPCP:           aba,
+		ColunasDeData:        []int{2},
+		ColunaCodigo:         0,
+		ColunaDescricao:      1,
+		LinhaInicialDosDados: 1,
+		PastaOrdensPCP:       filepath.Join(pasta, "out"),
 	}
-	processor, err := NewProcessor(cfg, WithRenderer(FileRenderer{TemplatePath: templatePath}))
+	processador, err := NovoProcessador(configuracao, ComRenderizador(RenderizadorArquivo{CaminhoTemplate: caminhoTemplate}))
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	result, err := processor.ProcessFile(context.Background(), xlsxPath)
+	resultado, err := processador.ProcessarArquivo(context.Background(), caminhoPlanilha)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.FormsGenerated != 1 {
-		t.Fatalf("FormsGenerated = %d, want 1", result.FormsGenerated)
+	if resultado.FichasGeradas != 1 {
+		t.Fatalf("FichasGeradas = %d, esperado 1", resultado.FichasGeradas)
 	}
-	if result.LinesWithProduction != 2 {
-		t.Fatalf("LinesWithProduction = %d, want 2", result.LinesWithProduction)
+	if resultado.LinhasComProducao != 2 {
+		t.Fatalf("LinhasComProducao = %d, esperado 2", resultado.LinhasComProducao)
 	}
-	if len(result.MissingProducts) != 1 || result.MissingProducts[0] != "999-9" {
-		t.Fatalf("MissingProducts inesperado: %#v", result.MissingProducts)
+	if len(resultado.ProdutosAusentes) != 1 || resultado.ProdutosAusentes[0] != "999-9" {
+		t.Fatalf("ProdutosAusentes inesperado: %#v", resultado.ProdutosAusentes)
 	}
-	if len(result.GeneratedFiles) != 1 {
-		t.Fatalf("GeneratedFiles = %d, want 1", len(result.GeneratedFiles))
+	if len(resultado.ArquivosGerados) != 1 {
+		t.Fatalf("ArquivosGerados = %d, esperado 1", len(resultado.ArquivosGerados))
 	}
-	if _, err := os.Stat(result.GeneratedFiles[0].Path); err != nil {
+	if _, err := os.Stat(resultado.ArquivosGerados[0].Caminho); err != nil {
 		t.Fatalf("arquivo gerado nao encontrado: %v", err)
 	}
-	wantPath := filepath.Join(cfg.FolderOPPCP, "29.05.2026", "123-4 [29.05.2026].pdf")
-	if result.GeneratedFiles[0].Path != wantPath {
-		t.Fatalf("Path = %q, want %q", result.GeneratedFiles[0].Path, wantPath)
+	caminhoEsperado := filepath.Join(configuracao.PastaOrdensPCP, "29.05.2026", "123-4 [29.05.2026].pdf")
+	if resultado.ArquivosGerados[0].Caminho != caminhoEsperado {
+		t.Fatalf("Caminho = %q, esperado %q", resultado.ArquivosGerados[0].Caminho, caminhoEsperado)
 	}
-	content, err := os.ReadFile(result.GeneratedFiles[0].Path)
+	conteudo, err := os.ReadFile(resultado.ArquivosGerados[0].Caminho)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(content) != "123-4 Produto Planilha" {
-		t.Fatalf("conteudo renderizado inesperado: %q", string(content))
+	if string(conteudo) != "123-4 Produto Planilha" {
+		t.Fatalf("conteudo renderizado inesperado: %q", string(conteudo))
 	}
 }
 
-func mustSetCell(t *testing.T, f *excelize.File, sheet string, cell string, value any) {
+// definirCelulaOuFalhar grava um valor na célula e interrompe o teste se a
+// gravação falhar.
+func definirCelulaOuFalhar(t *testing.T, planilha *excelize.File, aba string, celula string, valor any) {
 	t.Helper()
-	if err := f.SetCellValue(sheet, cell, value); err != nil {
+	if err := planilha.SetCellValue(aba, celula, valor); err != nil {
 		t.Fatal(err)
 	}
 }

@@ -1,38 +1,41 @@
 package pcppdf
 
-// Config centraliza todos os parâmetros necessários para orquestrar o pipeline do SPDF.
-// Estes valores são geralmente preenchidos através das flags de CLI no cmd/main.go.
-type Config struct {
-	TemplateHTML     string // Caminho para o template base (HTML/PDF)
-	FontFileName     string // Nome da fonte principal a ser usada
-	MetaCSVFile      string // Caminho para o CSV de metadados dos produtos
-	PCPTabName       string // Nome da aba (Planilha) que contém a programação de produção
-	ListColumnData   []int  // Índices das colunas que representam as datas de produção
-	IndexColumnCod   int    // Índice da coluna onde fica o código do produto
-	IndexColItemDesc int    // Índice da coluna onde fica a descrição do item
-	IndexStartLine   int    // Linha onde os dados dos produtos efetivamente começam
-	IndexLineDate    int    // Linha onde estão localizados os cabeçalhos de data
-	FolderOPPCP      string // Diretório de saída para as ordens de produção padrão
-	FolderOPInclusao string // Diretório de saída opcional para ordens de inclusão manual
+// Configuracao reúne os parâmetros que descrevem o layout da planilha, os
+// arquivos de apoio e as pastas de saída. Em geral, o comando spdf a preenche
+// a partir das flags de linha de comando.
+//
+// Todos os índices de coluna e de linha começam em zero.
+type Configuracao struct {
+	CaminhoTemplateHTML  string // caminho do template base (HTML/PDF)
+	NomeFontePrincipal   string // nome da fonte principal; reservado, ainda não é usado
+	CaminhoCSVMetadados  string // caminho do CSV de metadados dos produtos
+	NomeAbaPCP           string // aba que contém a programação de produção
+	ColunasDeData        []int  // colunas com as quantidades de cada data de produção
+	ColunaCodigo         int    // coluna do código do produto
+	ColunaDescricao      int    // coluna da descrição do item
+	LinhaInicialDosDados int    // primeira linha com produtos; as anteriores são cabeçalho
+	LinhaDasDatas        int    // linha que contém os títulos de data
+	PastaOrdensPCP       string // pasta de saída das ordens de produção padrão
+	PastaOrdensInclusao  string // pasta de saída das ordens de inclusão manual (opcional)
 }
 
-// Validate verifica se as configurações mínimas obrigatórias foram fornecidas.
-// Impede a execução se parâmetros vitais como a planilha ou pastas de saída estiverem ausentes.
-func (c Config) Validate() error {
-	if c.TemplateHTML == "" {
-		return ErrMissingTemplateHTML
+// Validar verifica se os parâmetros obrigatórios foram informados. Ele devolve
+// o primeiro erro encontrado, na ordem em que os campos aparecem no código.
+func (c Configuracao) Validar() error {
+	if c.CaminhoTemplateHTML == "" {
+		return ErrTemplateHTMLAusente
 	}
-	if c.PCPTabName == "" {
-		return ErrMissingPCPTabName
+	if c.NomeAbaPCP == "" {
+		return ErrNomeAbaPCPAusente
 	}
-	if len(c.ListColumnData) == 0 {
-		return ErrMissingDateColumns
+	if len(c.ColunasDeData) == 0 {
+		return ErrColunasDeDataAusentes
 	}
-	if c.FolderOPPCP == "" {
-		return ErrMissingOutputFolder
+	if c.PastaOrdensPCP == "" {
+		return ErrPastaDeSaidaAusente
 	}
-	if c.MetaCSVFile == "" {
-		return ErrMissingMetadataCSV
+	if c.CaminhoCSVMetadados == "" {
+		return ErrCSVMetadadosAusente
 	}
 	return nil
 }

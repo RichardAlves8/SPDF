@@ -2,26 +2,31 @@ package pcppdf
 
 import "testing"
 
-func TestFormatDatePTBR(t *testing.T) {
-	got := formatDatePTBR("29/05/2026")
-	want := "Sexta — 29/05/2026"
-	if got != want {
-		t.Fatalf("got %q, want %q", got, want)
+// TestFormatarDataPTBR verifica se a data ganha o dia da semana em português.
+func TestFormatarDataPTBR(t *testing.T) {
+	obtido := formatarDataPTBR("29/05/2026")
+	esperado := "Sexta — 29/05/2026"
+	if obtido != esperado {
+		t.Fatalf("obtido %q, esperado %q", obtido, esperado)
 	}
 }
 
-func TestDateFolderForPath(t *testing.T) {
-	got := dateFolderForPath("Sexta — 29/05/2026")
-	want := "Sexta — 29.05.2026"
-	if got != want {
-		t.Fatalf("got %q, want %q", got, want)
+// TestPastaDeDataParaCaminho verifica se as barras da data viram pontos e o
+// dia da semana é preservado.
+func TestPastaDeDataParaCaminho(t *testing.T) {
+	obtido := pastaDeDataParaCaminho("Sexta — 29/05/2026")
+	esperado := "Sexta — 29.05.2026"
+	if obtido != esperado {
+		t.Fatalf("obtido %q, esperado %q", obtido, esperado)
 	}
 }
 
-func TestNormalizeCode(t *testing.T) {
-	got := normalizeCode("123-4.0")
-	want := "123-4"
-	if got != want {
-		t.Fatalf("got %q, want %q", got, want)
+// TestNormalizarCodigo verifica se o sufixo ".0" do Excel é removido e o hífen
+// do dígito verificador é mantido.
+func TestNormalizarCodigo(t *testing.T) {
+	obtido := normalizarCodigo("123-4.0")
+	esperado := "123-4"
+	if obtido != esperado {
+		t.Fatalf("obtido %q, esperado %q", obtido, esperado)
 	}
 }

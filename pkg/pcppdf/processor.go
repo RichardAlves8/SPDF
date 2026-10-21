@@ -9,212 +9,219 @@ import (
 	"github.com/xuri/excelize/v2"
 )
 
-// Processor é o motor principal responsável por ler a planilha de programação,
-// extrair os dados de produção e orquestrar a geração das fichas em PDF. (é o processador central!)
-type Processor struct {
-	cfg      Config
-	meta     map[string]ProdutoInfo
-	renderer Renderer
+// Processador lê a planilha de programação, extrai os dados de produção e
+// orquestra a geração das fichas em PDF.
+type Processador struct {
+	configuracao Configuracao
+	metadados    map[string]InformacaoProduto
+	renderizador Renderizador
 }
 
-// NewProcessor inicializa um novo processador com as configurações fornecidas.
-// Ele valida a configuração e garante que os metadados (CSV) sejam carregados.
-func NewProcessor(cfg Config, opts ...Option) (*Processor, error) {
-	if err := cfg.Validate(); err != nil {
+// NovoProcessador cria um Processador com a configuração informada. Ele valida
+// a configuração e, se as opções não trouxerem os metadados, carrega o CSV
+// indicado em Configuracao.CaminhoCSVMetadados.
+//
+// Sem a opção ComRenderizador, o Processador usa um RenderizadorArquivo sem
+// caminho de template, que não consegue gravar fichas. Informe sempre um
+// Renderizador.
+func NovoProcessador(configuracao Configuracao, opcoes ...Opcao) (*Processador, error) {
+	if err := configuracao.Validar(); err != nil {
 		return nil, err
 	}
 
-	p := &Processor{
-		cfg:      cfg,
-		renderer: FileRenderer{}, // Renderer padrão (HTML) caso não seja especificado outro.
+	processador := &Processador{
+		configuracao: configuracao,
+		renderizador: RenderizadorArquivo{},
 	}
-	
-	// Aplica opções funcionais (WithRenderer, WithMetadata, etc).
-	for _, opt := range opts {
-		opt(p)
+
+	for _, opcao := range opcoes {
+		opcao(processador)
 	}
-	
-	if p.renderer == nil {
-		return nil, ErrNilRenderer
+
+	if processador.renderizador == nil {
+		return nil, ErrRenderizadorNulo
 	}
-	
-	// Carrega metadados do CSV se eles ainda não foram injetados.
-	if p.meta == nil {
-		meta, err := LoadMetadataCSV(cfg.MetaCSVFile)
+
+	if processador.metadados == nil {
+		metadados, err := CarregarCSVMetadados(configuracao.CaminhoCSVMetadados)
 		if err != nil {
 			return nil, err
 		}
-		p.meta = meta
+		processador.metadados = metadados
 	}
-	return p, nil
+	return processador, nil
 }
 
-// SetRenderer permite trocar o motor de renderização em tempo de execução.
-func (p *Processor) SetRenderer(r Renderer) {
-	p.renderer = r
+// DefinirRenderizador troca o Renderizador em uso. Não é seguro chamá-lo
+// enquanto outro método do Processador estiver em execução.
+func (p *Processador) DefinirRenderizador(r Renderizador) {
+	p.renderizador = r
 }
 
-// ProcessFile é o ponto central de execução. Ele abre a planilha, itera sobre as linhas
-// usando streaming (para economizar memória) e envia cada item válido para o Emitter.
-func (p *Processor) ProcessFile(ctx context.Context, planningPath string) (*ProcessResult, error) {
-	// Verifica se o arquivo existe antes de tentar abrir.
-	if _, err := os.Stat(planningPath); err != nil {
+// ProcessarArquivo é o ponto central de execução. Ele abre a planilha, percorre
+// as linhas em streaming para economizar memória e entrega cada ordem válida
+// ao Emissor.
+//
+// Uma falha ao emitir interrompe o processamento e devolve o resultado parcial
+// junto com o erro. Produtos sem cadastro no CSV não interrompem: eles são
+// registrados no resultado e as demais ordens seguem.
+func (p *Processador) ProcessarArquivo(ctx context.Context, caminhoPlanilha string) (*ResultadoProcessamento, error) {
+	if _, err := os.Stat(caminhoPlanilha); err != nil {
 		return nil, err
 	}
 
-	// Abre o workbook (arquivo .xlsx / .xlsm).
-	workbook, err := excelize.OpenFile(planningPath)
+	arquivoExcel, err := excelize.OpenFile(caminhoPlanilha)
 	if err != nil {
 		return nil, err
 	}
-	defer workbook.Close()
+	defer arquivoExcel.Close()
 
-	// Valida se a aba informada existe.
-	if idx, err := workbook.GetSheetIndex(p.cfg.PCPTabName); err != nil || idx < 0 {
-		return nil, fmt.Errorf("aba PCP nao encontrada: %s", p.cfg.PCPTabName)
+	if indice, err := arquivoExcel.GetSheetIndex(p.configuracao.NomeAbaPCP); err != nil || indice < 0 {
+		return nil, fmt.Errorf("aba PCP nao encontrada: %s", p.configuracao.NomeAbaPCP)
 	}
 
-	// Utiliza o iterador de linhas (Rows) em vez de carregar tudo na memória (GetRows).
-	// Essencial para planilhas grandes e ambientes com pouca RAM.
-	rows, err := workbook.Rows(p.cfg.PCPTabName)
+	// Rows lê a aba linha a linha. GetRows carregaria a aba inteira na memória,
+	// o que estoura a RAM em planilhas grandes.
+	linhas, err := arquivoExcel.Rows(p.configuracao.NomeAbaPCP)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer linhas.Close()
 
-	// 1. Fase de Leitura: Extrai cabeçalhos de data e os itens que têm produção.
-	dateRaw, dateFormatted, items, err := p.readPlanRows(rows)
+	datasBrutas, datasFormatadas, itens, err := p.lerLinhasDaPlanilha(linhas)
 	if err != nil {
 		return nil, err
 	}
 
-	result := &ProcessResult{
-		LinesWithProduction: len(items),
+	resultado := &ResultadoProcessamento{
+		LinhasComProducao: len(itens),
 	}
 
-	// 2. Fase de Emissão: Para cada item e cada data com quantidade > 0, gera uma Ordem de Produção.
-	emitter := Emitter{
-		cfg:      p.cfg,
-		meta:     p.meta,
-		renderer: p.renderer,
+	emissor := Emissor{
+		configuracao: p.configuracao,
+		metadados:    p.metadados,
+		renderizador: p.renderizador,
 	}
 
-	nowDate := time.Now().Format("02/01/2006")
-	for _, item := range items {
-		for _, col := range p.cfg.ListColumnData {
-			qty := item.Quantities[col]
-			if qty <= 0 {
+	dataEmissao := time.Now().Format("02/01/2006")
+	for _, item := range itens {
+		for _, coluna := range p.configuracao.ColunasDeData {
+			quantidade := item.Quantidades[coluna]
+			if quantidade <= 0 {
 				continue
 			}
-			
-			result.OrdersProcessed++
-			date := dateFormatted[col]
-			if date == "" {
-				date = dateRaw[col]
+
+			resultado.OrdensProcessadas++
+
+			// Se a data não estiver no formato esperado, a formatação devolve
+			// o texto original, e o valor bruto da planilha é usado.
+			data := datasFormatadas[coluna]
+			if data == "" {
+				data = datasBrutas[coluna]
 			}
-			
-			// Solicita ao Emitter a geração do documento (enriquecimento + renderização).
-			generated, missing, err := emitter.Emit(ctx, EmitRequest{
+
+			gerado, ausente, err := emissor.Emitir(ctx, PedidoDeEmissao{
 				Codigo:        item.Codigo,
 				Descricao:     item.Descricao,
-				Quantidade:    qty,
-				DataFormatada: date,
-				DataEmissao:   nowDate,
-				Numero:        result.FormsGenerated,
+				Quantidade:    quantidade,
+				DataFormatada: data,
+				DataEmissao:   dataEmissao,
+				Numero:        resultado.FichasGeradas,
 				Inclusao:      false,
 			})
 			if err != nil {
-				return result, err
+				return resultado, err
 			}
-			
-			// Se o código do produto não estiver no meta-dados, logamos como item faltante.
-			if missing != "" {
-				result.MissingProducts = append(result.MissingProducts, missing)
-				result.MissingItems = append(result.MissingItems, MissingItem{
-					Codigo:     missing,
+
+			// O Emissor devolve o código quando o produto não existe no CSV.
+			if ausente != "" {
+				resultado.ProdutosAusentes = append(resultado.ProdutosAusentes, ausente)
+				resultado.ItensAusentes = append(resultado.ItensAusentes, ItemAusente{
+					Codigo:     ausente,
 					Produto:    item.Descricao,
-					Quantidade: qty,
-					Data:       date,
+					Quantidade: quantidade,
+					Data:       data,
 				})
 				continue
 			}
-			
-			result.GeneratedFiles = append(result.GeneratedFiles, generated)
-			result.FormsGenerated++
+
+			resultado.ArquivosGerados = append(resultado.ArquivosGerados, gerado)
+			resultado.FichasGeradas++
 		}
 	}
 
-	return result, nil
+	return resultado, nil
 }
 
-// readPlanRows percorre a planilha uma única vez, identificando as datas e os produtos.
-func (p *Processor) readPlanRows(rows *excelize.Rows) (map[int]string, map[int]string, []PlannedItem, error) {
-	raw := make(map[int]string)
-	formatted := make(map[int]string)
-	var items []PlannedItem
+// lerLinhasDaPlanilha percorre a planilha uma única vez e devolve os títulos de
+// data (brutos e formatados, indexados pela coluna) e os itens com produção.
+func (p *Processador) lerLinhasDaPlanilha(linhas *excelize.Rows) (map[int]string, map[int]string, []ItemPlanejado, error) {
+	brutas := make(map[int]string)
+	formatadas := make(map[int]string)
+	var itens []ItemPlanejado
 
-	rowIdx := 0
-	for rows.Next() {
-		row, err := rows.Columns()
+	indiceLinha := 0
+	for linhas.Next() {
+		linha, err := linhas.Columns()
 		if err != nil {
 			return nil, nil, nil, err
 		}
 
-		// Captura o cabeçalho de datas na linha configurada.
-		if rowIdx == p.cfg.IndexLineDate {
-			for _, col := range p.cfg.ListColumnData {
-				v := rowValue(row, col)
-				raw[col] = v
-				formatted[col] = formatDatePTBR(v)
+		if indiceLinha == p.configuracao.LinhaDasDatas {
+			for _, coluna := range p.configuracao.ColunasDeData {
+				valor := valorDaColuna(linha, coluna)
+				brutas[coluna] = valor
+				formatadas[coluna] = formatarDataPTBR(valor)
 			}
 		}
 
-		// Processa os dados dos produtos a partir da linha de início.
-		if rowIdx >= p.cfg.IndexStartLine {
-			item, ok := p.plannedItemFromRow(row)
-			if ok {
-				items = append(items, item)
+		if indiceLinha >= p.configuracao.LinhaInicialDosDados {
+			item, temProducao := p.itemPlanejadoDaLinha(linha)
+			if temProducao {
+				itens = append(itens, item)
 			}
 		}
 
-		rowIdx++
+		indiceLinha++
 	}
-	if err := rows.Error(); err != nil {
+	if err := linhas.Error(); err != nil {
 		return nil, nil, nil, err
 	}
-	return raw, formatted, items, nil
+	return brutas, formatadas, itens, nil
 }
 
-// plannedItemFromRow converte uma linha da planilha em um PlannedItem se houver produção nela.
-func (p *Processor) plannedItemFromRow(row []string) (PlannedItem, bool) {
-	quantities := make(map[int]float64)
-	hasProduction := false
-	
-	// Extrai quantidades apenas das colunas de datas configuradas.
-	for _, col := range p.cfg.ListColumnData {
-		qty := parseFloat(rowValue(row, col))
-		quantities[col] = qty
-		if qty > 0 {
-			hasProduction = true
+// itemPlanejadoDaLinha converte uma linha da planilha em ItemPlanejado. O
+// segundo retorno é falso quando a linha não tem quantidade maior que zero em
+// nenhuma coluna de data, e a linha deve ser ignorada.
+func (p *Processador) itemPlanejadoDaLinha(linha []string) (ItemPlanejado, bool) {
+	quantidades := make(map[int]float64)
+	temProducao := false
+
+	for _, coluna := range p.configuracao.ColunasDeData {
+		quantidade := converterDecimal(valorDaColuna(linha, coluna))
+		quantidades[coluna] = quantidade
+		if quantidade > 0 {
+			temProducao = true
 		}
 	}
-	
-	// Se a linha não tem nenhuma quantidade > 0, nós a ignoramos.
-	if !hasProduction {
-		return PlannedItem{}, false
+
+	if !temProducao {
+		return ItemPlanejado{}, false
 	}
-	
-	return PlannedItem{
-		Codigo:     normalizeCode(rowValue(row, p.cfg.IndexColumnCod)),
-		Descricao:  rowValue(row, p.cfg.IndexColItemDesc),
-		Quantities: quantities,
+
+	return ItemPlanejado{
+		Codigo:      normalizarCodigo(valorDaColuna(linha, p.configuracao.ColunaCodigo)),
+		Descricao:   valorDaColuna(linha, p.configuracao.ColunaDescricao),
+		Quantidades: quantidades,
 	}, true
 }
 
-// rowValue é um helper seguro para obter o valor de uma célula em um slice de strings.
-func rowValue(row []string, colIdx int) string {
-	if colIdx < 0 || colIdx >= len(row) {
+// valorDaColuna devolve o valor da coluna indicada. Se o índice estiver fora
+// da linha, devolve texto vazio em vez de causar pânico, porque uma linha lida
+// em streaming pode ter menos colunas do que o layout configurado prevê.
+func valorDaColuna(linha []string, indiceColuna int) string {
+	if indiceColuna < 0 || indiceColuna >= len(linha) {
 		return ""
 	}
-	return row[colIdx]
+	return linha[indiceColuna]
 }

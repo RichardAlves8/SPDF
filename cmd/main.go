@@ -1,3 +1,10 @@
+// Comando spdf gera as fichas de ordem de produção em PDF a partir de uma
+// planilha de programação (.xlsx ou .xlsm) e de um CSV de metadados dos
+// produtos.
+//
+// Com a flag -inspect, o comando não gera fichas: ele apenas lista as
+// primeiras linhas e colunas da planilha, para descobrir os índices que as
+// demais flags esperam.
 package main
 
 import (
@@ -16,209 +23,209 @@ import (
 	"github.com/xuri/excelize/v2"
 )
 
+// main lê as flags, valida a entrada e executa o modo de inspeção ou o
+// processamento da planilha.
 func main() {
-	// Definição das flags de linha de comando.
-	// Estes parâmetros permitem adaptar o SPDF a diferentes layouts de planilhas.
+	// As flags permitem adaptar o SPDF a diferentes layouts de planilha.
+	// Seus nomes são a interface externa do comando e devem ser mantidos.
 	var (
-		pcpPath       = flag.String("xls", "", "Caminho do arquivo .xlsx/.xlsm (Obrigatório)")
-		metaCSV       = flag.String("meta", "../resources/meta/dados.CSV", "Caminho do CSV de Metadados")
-		templateHTML  = flag.String("template", "../resources/templates/template.html", "Caminho do Template base")
-		outDir        = flag.String("out", "out/", "Pasta de saída para os PDFs")
-		sheetName     = flag.String("sheet", "RELATÓRIO PP GERAL", "Nome da aba da planilha")
-		dateCols      = flag.String("date-cols", "12,15,18,21,24,27,30,33,35,37,39", "Índices das colunas de datas (separados por vírgula)")
-		codeCol       = flag.Int("code-col", 2, "Índice da coluna do código do produto")
-		descCol       = flag.Int("desc-col", 3, "Índice da coluna da descrição")
-		startLine     = flag.Int("start-line", 5, "Linha onde começam os dados (ignora cabeçalho)")
-		dateLine      = flag.Int("date-line", 0, "Linha onde estão os títulos das datas")
-		inclusionPath = flag.String("inclusion-out", "", "Pasta de saída para ordens de inclusão")
-		inspect       = flag.Bool("inspect", false, "Modo Inspeção: apenas lista as colunas da planilha no terminal")
-		inspectRows   = flag.Int("inspect-rows", 8, "Qtd de linhas para inspecionar")
-		inspectCols   = flag.Int("inspect-cols", 20, "Qtd de colunas para inspecionar")
-		verbose       = flag.Bool("verbose", false, "Exibe detalhes do processamento no terminal")
-		enableLog     = flag.Bool("log", false, "Habilita a gravação de logs em arquivo")
-		logDir        = flag.String("log-dir", "logs", "Diretório para salvar os arquivos de log")
+		caminhoPlanilha  = flag.String("xls", "", "Caminho do arquivo .xlsx/.xlsm (Obrigatório)")
+		caminhoMetadados = flag.String("meta", "../resources/meta/dados.CSV", "Caminho do CSV de Metadados")
+		caminhoTemplate  = flag.String("template", "../resources/templates/template.html", "Caminho do Template base")
+		pastaSaida       = flag.String("out", "out/", "Pasta de saída para os PDFs")
+		nomeAba          = flag.String("sheet", "RELATÓRIO PP GERAL", "Nome da aba da planilha")
+		colunasDeData    = flag.String("date-cols", "12,15,18,21,24,27,30,33,35,37,39", "Índices das colunas de datas (separados por vírgula)")
+		colunaCodigo     = flag.Int("code-col", 2, "Índice da coluna do código do produto")
+		colunaDescricao  = flag.Int("desc-col", 3, "Índice da coluna da descrição")
+		linhaInicial     = flag.Int("start-line", 5, "Linha onde começam os dados (ignora cabeçalho)")
+		linhaDasDatas    = flag.Int("date-line", 0, "Linha onde estão os títulos das datas")
+		pastaInclusao    = flag.String("inclusion-out", "", "Pasta de saída para ordens de inclusão")
+		inspecionar      = flag.Bool("inspect", false, "Modo Inspeção: apenas lista as colunas da planilha no terminal")
+		linhasInspecao   = flag.Int("inspect-rows", 8, "Qtd de linhas para inspecionar")
+		colunasInspecao  = flag.Int("inspect-cols", 20, "Qtd de colunas para inspecionar")
+		detalhado        = flag.Bool("verbose", false, "Exibe detalhes do processamento no terminal")
+		gravarLog        = flag.Bool("log", false, "Habilita a gravação de logs em arquivo")
+		pastaLog         = flag.String("log-dir", "logs", "Diretório para salvar os arquivos de log")
 	)
 	flag.Parse()
 
-	// Validação básica de entrada.
-	if *pcpPath == "" {
-		exitf("Erro: Caminho do arquivo não informado. Use a flag -xls")
+	if *caminhoPlanilha == "" {
+		sairComErro("Erro: Caminho do arquivo não informado. Use a flag -xls")
 	}
 
-	// Modo Inspeção: Útil para descobrir os índices das colunas sem abrir o Excel.
-	if *inspect {
-		if err := inspectSheet(*pcpPath, *sheetName, *inspectRows, *inspectCols); err != nil {
-			exitf("Erro ao inspecionar: %v", err)
+	// O modo de inspeção ajuda a descobrir os índices das colunas sem abrir o Excel.
+	if *inspecionar {
+		if err := inspecionarPlanilha(*caminhoPlanilha, *nomeAba, *linhasInspecao, *colunasInspecao); err != nil {
+			sairComErro("Erro ao inspecionar: %v", err)
 		}
 		return
 	}
 
-	// Configura o sistema de saída (Terminal + Arquivo de Log).
-	w, closeLog, err := buildWriter(*verbose, *enableLog, *logDir)
+	saida, fecharLog, err := montarSaida(*detalhado, *gravarLog, *pastaLog)
 	if err != nil {
-		exitf("Erro ao configurar log: %v", err)
+		sairComErro("Erro ao configurar log: %v", err)
 	}
-	defer closeLog()
+	defer fecharLog()
 
-	// Converte a string de colunas (ex: "12,15") em um slice de inteiros.
-	cols, err := parseColumns(*dateCols)
+	colunas, err := lerColunas(*colunasDeData)
 	if err != nil {
-		exitf("Erro ao processar date-cols: %v", err)
+		sairComErro("Erro ao processar date-cols: %v", err)
 	}
-	if len(cols) == 0 {
-		exitf("Erro: Nenhuma coluna de data informada. Use -date-cols c1,c2...")
-	}
-
-	// Monta a struct de configuração para o pacote pcppdf.
-	cfg := pcppdf.Config{
-		TemplateHTML:     *templateHTML,
-		MetaCSVFile:      *metaCSV,
-		PCPTabName:       *sheetName,
-		ListColumnData:   cols,
-		IndexColumnCod:   *codeCol,
-		IndexColItemDesc: *descCol,
-		IndexStartLine:   *startLine,
-		IndexLineDate:    *dateLine,
-		FolderOPPCP:      *outDir,
-		FolderOPInclusao: *inclusionPath,
+	if len(colunas) == 0 {
+		sairComErro("Erro: Nenhuma coluna de data informada. Use -date-cols c1,c2...")
 	}
 
-	// Inicializa o Processor com o Renderer oficial (GoPDFRenderer).
-	processor, err := pcppdf.NewProcessor(cfg, pcppdf.WithRenderer(pcppdf.GoPDFRenderer{
-		FontDir: filepath.Dir(*templateHTML),
+	configuracao := pcppdf.Configuracao{
+		CaminhoTemplateHTML:  *caminhoTemplate,
+		CaminhoCSVMetadados:  *caminhoMetadados,
+		NomeAbaPCP:           *nomeAba,
+		ColunasDeData:        colunas,
+		ColunaCodigo:         *colunaCodigo,
+		ColunaDescricao:      *colunaDescricao,
+		LinhaInicialDosDados: *linhaInicial,
+		LinhaDasDatas:        *linhaDasDatas,
+		PastaOrdensPCP:       *pastaSaida,
+		PastaOrdensInclusao:  *pastaInclusao,
+	}
+
+	// As fontes ficam na mesma pasta do template.
+	processador, err := pcppdf.NovoProcessador(configuracao, pcppdf.ComRenderizador(pcppdf.RenderizadorGoPDF{
+		PastaFontes: filepath.Dir(*caminhoTemplate),
 	}))
 	if err != nil {
-		exitf("Não foi possível iniciar o processador: %v", err)
+		sairComErro("Não foi possível iniciar o processador: %v", err)
 	}
 
-	// Executa o processamento principal do arquivo.
-	result, err := processor.ProcessFile(context.Background(), *pcpPath)
+	resultado, err := processador.ProcessarArquivo(context.Background(), *caminhoPlanilha)
 	if err != nil {
-		exitf("Erro durante o processamento: %v", err)
+		sairComErro("Erro durante o processamento: %v", err)
 	}
 
-	// Exibe detalhes se o modo verbose ou log estiverem ativos.
-	if *verbose || *enableLog {
-		fmt.Fprintln(w, "\n--- Detalhes do Processamento ---")
-		if len(result.GeneratedFiles) == 0 && len(result.MissingItems) == 0 {
-			fmt.Fprintln(w, "Nenhum dado produtivo encontrado.")
+	if *detalhado || *gravarLog {
+		fmt.Fprintln(saida, "\n--- Detalhes do Processamento ---")
+		if len(resultado.ArquivosGerados) == 0 && len(resultado.ItensAusentes) == 0 {
+			fmt.Fprintln(saida, "Nenhum dado produtivo encontrado.")
 		}
-		for _, file := range result.GeneratedFiles {
-			fmt.Fprintf(w, "[OK]  | %s - %s - %.2f - %s\n", file.Codigo, file.Produto, file.Quantidade, file.Data)
+		for _, arquivo := range resultado.ArquivosGerados {
+			fmt.Fprintf(saida, "[OK]  | %s - %s - %.2f - %s\n", arquivo.Codigo, arquivo.Produto, arquivo.Quantidade, arquivo.Data)
 		}
-		for _, item := range result.MissingItems {
-			fmt.Fprintf(w, "[ERR] | %s - %s - %.2f - %s | Metadados não encontrados\n", item.Codigo, item.Produto, item.Quantidade, item.Data)
+		for _, item := range resultado.ItensAusentes {
+			fmt.Fprintf(saida, "[ERR] | %s - %s - %.2f - %s | Metadados não encontrados\n", item.Codigo, item.Produto, item.Quantidade, item.Data)
 		}
 	}
 
-	// Prepara o resumo final para o usuário.
-	writers := []io.Writer{os.Stdout}
-	if *enableLog && w != os.Stdout {
-		writers = append(writers, w)
+	// O resumo final sempre vai ao terminal e, com o log ativo, também ao arquivo.
+	destinos := []io.Writer{os.Stdout}
+	if *gravarLog && saida != os.Stdout {
+		destinos = append(destinos, saida)
 	}
-	summary := io.MultiWriter(writers...)
+	resumo := io.MultiWriter(destinos...)
 
-	fmt.Fprintln(summary, "\n--- Resumo Final ---")
-	fmt.Fprintf(summary, "Linhas com produção identificadas: %d\n", result.LinesWithProduction)
-	fmt.Fprintf(summary, "Total de ordens individuais: %d\n", result.OrdersProcessed)
-	fmt.Fprintf(summary, "Fichas PDF geradas com sucesso: %d\n", result.FormsGenerated)
-	fmt.Fprintf(summary, "Produtos ausentes no cadastro (CSV): %d\n", len(result.MissingProducts))
+	fmt.Fprintln(resumo, "\n--- Resumo Final ---")
+	fmt.Fprintf(resumo, "Linhas com produção identificadas: %d\n", resultado.LinhasComProducao)
+	fmt.Fprintf(resumo, "Total de ordens individuais: %d\n", resultado.OrdensProcessadas)
+	fmt.Fprintf(resumo, "Fichas PDF geradas com sucesso: %d\n", resultado.FichasGeradas)
+	fmt.Fprintf(resumo, "Produtos ausentes no cadastro (CSV): %d\n", len(resultado.ProdutosAusentes))
 }
 
-// buildWriter decide para onde a saída do programa deve ir.
-func buildWriter(verbose, enableLog bool, logDir string) (io.Writer, func(), error) {
-	noop := func() {}
+// montarSaida decide para onde vai a saída detalhada do programa e devolve,
+// além do destino, a função que deve ser chamada ao final para fechá-lo.
+//
+// Sem verbose e sem log, a saída é descartada. Só com verbose, vai ao terminal.
+// Com log, vai a um arquivo com a data e a hora no nome, dentro de pastaLog,
+// e também ao terminal se verbose estiver ativo.
+func montarSaida(detalhado, gravarLog bool, pastaLog string) (io.Writer, func(), error) {
+	semAcao := func() {}
 
-	// Se nada estiver ativo, descarta a saída.
-	if !verbose && !enableLog {
-		return io.Discard, noop, nil
+	if !detalhado && !gravarLog {
+		return io.Discard, semAcao, nil
 	}
-	// Apenas terminal.
-	if verbose && !enableLog {
-		return os.Stdout, noop, nil
+	if detalhado && !gravarLog {
+		return os.Stdout, semAcao, nil
 	}
 
-	// Se o log em arquivo estiver ativo, cria a pasta e o arquivo com timestamp.
-	if err := os.MkdirAll(logDir, 0o755); err != nil {
-		return nil, noop, fmt.Errorf("erro ao criar pasta de log: %w", err)
+	if err := os.MkdirAll(pastaLog, 0o755); err != nil {
+		return nil, semAcao, fmt.Errorf("erro ao criar pasta de log: %w", err)
 	}
-	timestamp := time.Now().Format("20060102150405")
-	logPath := filepath.Join(logDir, timestamp+".log")
+	instante := time.Now().Format("20060102150405")
+	caminhoLog := filepath.Join(pastaLog, instante+".log")
 
-	f, err := os.Create(logPath)
+	arquivo, err := os.Create(caminhoLog)
 	if err != nil {
-		return nil, noop, fmt.Errorf("erro ao criar arquivo de log: %w", err)
+		return nil, semAcao, fmt.Errorf("erro ao criar arquivo de log: %w", err)
 	}
-	close := func() { f.Close() }
+	fechar := func() { arquivo.Close() }
 
-	// Se verbose estiver ativo, duplica a saída (Terminal + Arquivo).
-	if verbose {
-		return io.MultiWriter(os.Stdout, f), close, nil
+	if detalhado {
+		return io.MultiWriter(os.Stdout, arquivo), fechar, nil
 	}
-	return f, close, nil
+	return arquivo, fechar, nil
 }
 
-// parseColumns transforma "1,2,3" em []int{1, 2, 3}.
-func parseColumns(raw string) ([]int, error) {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
+// lerColunas transforma um texto como "1,2,3" em []int{1, 2, 3}. Texto vazio
+// resulta em lista vazia, sem erro.
+func lerColunas(texto string) ([]int, error) {
+	texto = strings.TrimSpace(texto)
+	if texto == "" {
 		return nil, nil
 	}
-	parts := strings.Split(raw, ",")
-	cols := make([]int, 0, len(parts))
-	for _, part := range parts {
-		n, err := strconv.Atoi(strings.TrimSpace(part))
+	partes := strings.Split(texto, ",")
+	colunas := make([]int, 0, len(partes))
+	for _, parte := range partes {
+		numero, err := strconv.Atoi(strings.TrimSpace(parte))
 		if err != nil {
 			return nil, err
 		}
-		cols = append(cols, n)
+		colunas = append(colunas, numero)
 	}
-	return cols, nil
+	return colunas, nil
 }
 
-// exitf exibe um erro no stderr e encerra o programa.
-func exitf(format string, args ...any) {
-	fmt.Fprintf(os.Stderr, format+"\n", args...)
+// sairComErro escreve a mensagem formatada na saída de erro e encerra o
+// programa com o código 1.
+func sairComErro(formato string, argumentos ...any) {
+	fmt.Fprintf(os.Stderr, formato+"\n", argumentos...)
 	os.Exit(1)
 }
 
-// inspectSheet abre a planilha e imprime as primeiras colunas de cada linha.
-// Fundamental para o usuário mapear os índices das colunas corretamente.
-func inspectSheet(path string, sheet string, maxRows int, maxCols int) error {
-	workbook, err := excelize.OpenFile(path)
+// inspecionarPlanilha abre a aba indicada e imprime as primeiras colunas das
+// primeiras linhas, sem as células vazias. Os índices impressos são os mesmos
+// que as flags -code-col, -desc-col e -date-cols esperam.
+func inspecionarPlanilha(caminho string, aba string, maximoLinhas int, maximoColunas int) error {
+	arquivoExcel, err := excelize.OpenFile(caminho)
 	if err != nil {
 		return err
 	}
-	defer workbook.Close()
+	defer arquivoExcel.Close()
 
-	rows, err := workbook.Rows(sheet)
+	linhas, err := arquivoExcel.Rows(aba)
 	if err != nil {
 		return err
 	}
-	defer rows.Close()
+	defer linhas.Close()
 
-	fmt.Printf("Inspecionando Aba: %s (Índices base zero)\n", sheet)
+	fmt.Printf("Inspecionando Aba: %s (Índices base zero)\n", aba)
 
-	rowIdx := 0
-	for rows.Next() {
-		if rowIdx >= maxRows {
+	indiceLinha := 0
+	for linhas.Next() {
+		if indiceLinha >= maximoLinhas {
 			break
 		}
-		row, err := rows.Columns()
+		linha, err := linhas.Columns()
 		if err != nil {
 			return err
 		}
 
-		fmt.Printf("\n[Linha %d]:\n", rowIdx)
-		for colIdx := 0; colIdx < len(row) && colIdx < maxCols; colIdx++ {
-			value := strings.TrimSpace(row[colIdx])
-			if value == "" {
+		fmt.Printf("\n[Linha %d]:\n", indiceLinha)
+		for indiceColuna := 0; indiceColuna < len(linha) && indiceColuna < maximoColunas; indiceColuna++ {
+			valor := strings.TrimSpace(linha[indiceColuna])
+			if valor == "" {
 				continue
 			}
-			fmt.Printf("  col %02d -> %s\n", colIdx, value)
+			fmt.Printf("  col %02d -> %s\n", indiceColuna, valor)
 		}
-		rowIdx++
+		indiceLinha++
 	}
 
-	return rows.Error()
+	return linhas.Error()
 }

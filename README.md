@@ -118,12 +118,6 @@ A documentação técnica completa está em [`docs/Codigo.md`](docs/Codigo.md). 
 | Saber o que acontece em caso de erro | [Tratamento de erros](docs/Codigo.md#5-tratamento-de-erros) |
 | Conhecer os limites do projeto | [Garantias e limitações](docs/Codigo.md#6-garantias-e-limitações) |
 
-## 5. Observações finais
-
-Este repositório representa apenas uma parte do todo (no entanto, a mais importante, e a que resolve o problema). O SPDF completo possui interface gráfica e foi desenvolvido em Java com Apache POI, conexão JDBC para metadados atualizados e arquivos de configuração (strings de conexão e acesso a outros servidores) criptografados em AES-GCM.
-
-O original também contém cache de arquivos de metadados. Ele é necessário porque, no setor de produção, é comum os operadores abrirem o sistema repetidamente para emitir inclusões (pedidos fora da programação semanal ou por encomenda).
-
-## 6. Agradecimentos
+## 5. Agradecimentos
 
 Ao time de Programação e Controle de Produção *(PCP)*, pelo apoio durante o desenvolvimento: os reais responsáveis por todo o processo. Foi um dos projetos mais divertidos que já trabalhei em equipe, e eles mudaram a forma como enxergo colaboração e desenvolvimento. Grande parceria.

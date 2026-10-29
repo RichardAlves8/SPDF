@@ -17,21 +17,6 @@
 
 O SPDF lê uma planilha de programação de produção e gera uma ficha em PDF para cada ordem: uma página A4 em paisagem com o código e a descrição do produto, a data, a quantidade necessária, a classificação, o código de barras e os campos de preenchimento manual. Você aponta para a planilha, para um CSV com os dados cadastrais dos produtos, e ele devolve as fichas organizadas em uma pasta por data.
 
-```mermaid
-flowchart TD
-    cmd["cmd/main.go"] --> proc
-
-    subgraph pkg["pkg/pcppdf"]
-        in["Planilha .xlsx / .xlsm"] --> proc["Processador"]
-        csv["CSV de metadados"] --> emit
-        proc --> emit["Emissor"]
-        emit --> rend["Renderizador"]
-    end
-
-    rend --> pdf["PDF por ordem"]
-    res["resources/templates"] --> rend
-```
-
 O `cmd/main.go` é a porta de entrada da linha de comando e conduz o pacote `pkg/pcppdf`. Dentro dele, o fluxo segue uma direção só: o `Processador` lê a planilha e separa as linhas com produção, o `Emissor` completa cada ordem com os dados do CSV e o `Renderizador` desenha o PDF usando as fontes de `resources/templates`.
 
 Para rodar, você precisa do Go 1.22 ou superior. Todo o resto vem pelos módulos do Go.
@@ -39,13 +24,6 @@ Para rodar, você precisa do Go 1.22 ou superior. Todo o resto vem pelos módulo
 ## 2. Origem
 
 Diariamente, o responsável pela emissão de ordens de produção separava entre uma e duas horas para realizar um processo inteiramente manual: copiar o código da planilha de programação, colar no template de ficha e imprimir, uma ficha por vez. Em períodos sazonais, essa carga podia ultrapassar as duas horas com facilidade, chegando de 200 a 500 ordens por dia.
-
-```mermaid
-flowchart LR
-    A["Planilha de programação"] -->|Ctrl+C| B["Template de ficha"]
-    B -->|Ctrl+P| C["Ficha impressa"]
-    C -.->|de uma em uma| A
-```
 
 Por se tratar de documentos destinados ao controle de produção, qualquer erro tinha impacto direto no processo fabril. Como o trabalho era manual, a tarefa era ao mesmo tempo repetitiva e suscetível a falhas operacionais. Era preciso um processo seguro, e daí vem o nome: SPDF, de *Security PDF*.
 
